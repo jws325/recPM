@@ -1,6 +1,6 @@
 # RPM
 
-Private repo for moneo job #612
+For moneo job #922
 
 ## Notes
 Ropsten contract owner 0xa2a8d81485a1dee0ace2d5d6600225423dd573b5 0x2be5a725ab178efeb4155ee1589196e21ed6c91fa8857af78cb8c975163ac1f6 Test12345
