@@ -16,19 +16,19 @@ contract RPM is StandardToken, Ownable {
   uint256 public decimals = 6;
 
   // structures to keep track of token holders
-  mapping(address => bool) holderAddressInitialized;
+  mapping(address => bool) public holderAddressInitialized;
   address[] public holderAddresses;
 
-  uint256 public nextTokenDistribution;
-  uint256 public nextVoteDistribution;
+  mapping(address => uint) public upvotesReceivedThisWeek;
 
-  // Project votes
-  mapping(address => uint) public projects;
-  address[] public projectKeys;
-  uint256 public totalVotesReceived;
+  // structures to keep track of project addresses
+  mapping(address => bool) public projectAddressInitialized;
+  address[] public projectAddresses;
 
-  //vote balance
-  mapping(address => uint256) votesToUse;
+  uint public totalUpvotesReceivedThisWeek;
+
+  // votes to use
+  mapping(address => uint) public votesToUse;
 
   /*
    * Public functions
@@ -37,93 +37,92 @@ contract RPM is StandardToken, Ownable {
   /**
   * @dev Contract constructor
   * @param _totalSupply Initial Token Supply
-  * @param _nextTokenDistribution First Allowed Token Distribution
-  * @param _nextVoteDistribution First Allowed Vote Distribution
   */
-
-  function RPM(uint256 _totalSupply, uint256 _nextTokenDistribution, uint256 _nextVoteDistribution) public {
+  function RPM(uint256 _totalSupply) public {
     totalSupply = _totalSupply;
-
-    nextTokenDistribution = _nextTokenDistribution;
-    nextVoteDistribution = _nextVoteDistribution;
 
     // allocate initial supply to creator
     balances[owner] = totalSupply;
     tryAddHolderAddress(owner);
   }
 
-  function distributeTokens(uint _amount) external onlyOwner returns (bool) {
-    require(_amount > 0);
-    require(canDistributeTokens());
-
-    //Set back to false to stop double
-    nextTokenDistribution += 7 * 24 * 60 * 60;
-
-    for (uint i = 0; i < projectKeys.length; i++) {
-      address project = projectKeys[i];
-      balances[project] += getProjectTokens(project);
+  /**
+   * @dev add project address
+   * @param _address Project Address
+   */
+  function addProjectAddress(address _address) public {
+    if (!projectAddressInitialized[_address]) {
+      projectAddresses.push(_address);
+      projectAddressInitialized[_address] = true;
     }
-
-    totalVotesReceived = 0;
-    return true;
   }
 
-  function distributeVotes(uint _amount) external onlyOwner returns (bool) {
-    require(_amount > 0);
-    require(canDistributeVotes());
-
-    //Set back to false to stop double
-    nextVoteDistribution += 7 * 24 * 60 * 60;
+  /**
+   * @dev Distribute Votes
+   * @param _votesToDistribute Amount of votes to distribute
+   */
+  function distributeVotes(uint _votesToDistribute) external onlyOwner {
+    require(_votesToDistribute > 0);
 
     for (uint i = 0; i < holderAddresses.length; i++) {
-      address holder = holderAddresses[i];
-      votesToUse[holder] += getHoldersVoteAllocation(holder).mul(_amount);
+      address holderAddress = holderAddresses[i];
+      votesToUse[holderAddress] = votesToUse[holderAddress].add(balanceOf(holderAddress).mul(_votesToDistribute).div(totalSupply));
+    }
+  }
+
+  /**
+   * @dev Vote
+   * @param _projectAddress Project address
+   */
+  function vote(address _projectAddress) public {
+    require(votesToUse[msg.sender] > 0);
+    // check project is in the list
+    require(projectAddressInitialized[_projectAddress]);
+
+    // decrease votes available
+    votesToUse[msg.sender] = votesToUse[msg.sender].sub(1);
+
+    // count vote in
+    upvotesReceivedThisWeek[_projectAddress] = upvotesReceivedThisWeek[_projectAddress].add(1);
+    totalUpvotesReceivedThisWeek = totalUpvotesReceivedThisWeek.add(1);
+  }
+
+  /**
+   * @dev Distribute Tokens
+   * @param _newTokens Amount of tokens to distribute
+   */
+  function distributeTokens(uint _newTokens) public onlyOwner {
+    require(_newTokens > 0);
+    require(totalUpvotesReceivedThisWeek > 0);
+
+    uint previousOwnerBalance = balanceOf(owner);
+
+    // mint tokens to owner
+    increaseSupply(_newTokens, owner);
+
+    for (uint i = 0; i < projectAddresses.length; i++) {
+      address projectAddress = projectAddresses[i];
+      uint tokensToTransfer = upvotesReceivedThisWeek[projectAddress].mul(_newTokens).div(totalUpvotesReceivedThisWeek);
+      transfer(projectAddress, tokensToTransfer);
+      upvotesReceivedThisWeek[projectAddress] = 0;
     }
 
+    totalUpvotesReceivedThisWeek = 0;
+
+    // make sure we didn't redistribute more tokens than created
+    assert(balanceOf(owner) >= previousOwnerBalance);
+  }
+
+  /**
+   * @dev Increase Token Supply
+   * @param _value amount of tokens
+   * @param _to Destination address
+   */
+  function increaseSupply(uint _value, address _to) private onlyOwner returns (bool) {
+    totalSupply = totalSupply.add(_value);
+    balances[_to] = balances[_to].add(_value);
+    Transfer(0, _to, _value);
     return true;
-  }
-
-  function vote(address _address, uint _amount) public {
-    require(votesToUse[msg.sender] >= _amount);
-
-    votesToUse[msg.sender] -= _amount;
-    projects[_address] += _amount;
-
-    totalVotesReceived++;
-  }
-
-  function canDistributeTokens() public constant returns (bool) {
-    require(now > nextTokenDistribution);
-    return true;
-  }
-
-  function canDistributeVotes() public constant returns (bool) {
-    require(now > nextVoteDistribution);
-    return true;
-  }
-
-  // Get rpm holders voting shares allocation
-  function getHoldersVoteAllocation(address _owner) public constant returns (uint256) {
-    uint256 rpmx = balances[_owner];
-    uint256 vwx = rpmx.div(totalSupply);
-    return vwx;
-  }
-
-  // Get rpm tokens for a project
-  function getProjectTokens(address _project) public constant returns (uint) {
-    require(balances[_project] > 0);
-
-    uint256 uwX = votesToUse[_project].div(totalVotesReceived);
-    return uwX;
-  }
-
-  // Vote balances
-  function voteBalanceOf(address addr) public constant returns (uint) {
-    return votesToUse[addr];
-  }
-
-  function projectVotes(address addr) public constant returns (uint) {
-    return projects[addr];
   }
 
   /**
@@ -161,10 +160,15 @@ contract RPM is StandardToken, Ownable {
     }
   }
 
-  function burn(uint _amount) public onlyOwner {
-    require(balanceOf(owner) >= _amount);
-
-    balances[owner] = balances[owner].sub(_amount);
+  /**
+    * @dev Burn tokens
+    * @param _value Amount of tokens to burn
+    */
+  function burn(uint _value) public onlyOwner returns (bool) {
+    totalSupply = totalSupply.sub(_value);
+    balances[msg.sender] = balances[msg.sender].sub(_value);
+    Transfer(msg.sender, 0, _value);
+    return true;
   }
 
 }

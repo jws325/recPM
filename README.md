@@ -24,3 +24,7 @@ These new RPM tokens will be minted by increasing the supply of RPM tokens, in a
 
 RPM and Vote balances are represented to 10^6, this is due to potential rounding issues.
 
+## Instructions
+To run tests : 
+
+```$ truffle test```
