@@ -4,15 +4,21 @@ import './zeppelin/SafeMath.sol';
 import './zeppelin/StandardToken.sol';
 import './zeppelin/Ownable.sol';
 
-contract RPM is StandardToken, Ownable {
+contract RECPM is StandardToken, Ownable {
   using SafeMath for uint;
+
+  /*
+   * Events
+   */
+  event VotesDistributed(uint _amount);
+  event TokensDistributed(uint _amount);
 
   /*
    * Storage
    */
 
-  string public name = "RPM";
-  string public symbol = "RPM";
+  string public name = "RECPM";
+  string public symbol = "RECPM";
   uint256 public decimals = 6;
 
   // structures to keep track of token holders
@@ -27,6 +33,9 @@ contract RPM is StandardToken, Ownable {
 
   uint public totalUpvotesReceivedThisWeek;
 
+  uint public lastVotesDistributionTimestamp;
+  uint public lastTokensDistributionTimestamp;
+
   // votes to use
   mapping(address => uint) public votesToUse;
 
@@ -38,7 +47,7 @@ contract RPM is StandardToken, Ownable {
   * @dev Contract constructor
   * @param _totalSupply Initial Token Supply
   */
-  function RPM(uint256 _totalSupply) public {
+  function RECPM(uint256 _totalSupply) public {
     totalSupply = _totalSupply;
 
     // allocate initial supply to creator
@@ -63,11 +72,19 @@ contract RPM is StandardToken, Ownable {
    */
   function distributeVotes(uint _votesToDistribute) external onlyOwner {
     require(_votesToDistribute > 0);
+    // 7 days minimum between distributions
+    require(now >= lastVotesDistributionTimestamp + 7 days);
 
     for (uint i = 0; i < holderAddresses.length; i++) {
       address holderAddress = holderAddresses[i];
       votesToUse[holderAddress] = votesToUse[holderAddress].add(balanceOf(holderAddress).mul(_votesToDistribute).div(totalSupply));
     }
+
+    // update timestamp;
+    lastVotesDistributionTimestamp = now;
+
+    // Log event
+    VotesDistributed(_votesToDistribute);
   }
 
   /**
@@ -94,6 +111,8 @@ contract RPM is StandardToken, Ownable {
   function distributeTokens(uint _newTokens) public onlyOwner {
     require(_newTokens > 0);
     require(totalUpvotesReceivedThisWeek > 0);
+    // 7 days minimum between distributions
+    require(now >= lastTokensDistributionTimestamp + 7 days);
 
     uint previousOwnerBalance = balanceOf(owner);
 
@@ -107,10 +126,16 @@ contract RPM is StandardToken, Ownable {
       upvotesReceivedThisWeek[projectAddress] = 0;
     }
 
+    // reset total votes
     totalUpvotesReceivedThisWeek = 0;
+    // update timestamp;
+    lastTokensDistributionTimestamp = now;
 
     // make sure we didn't redistribute more tokens than created
     assert(balanceOf(owner) >= previousOwnerBalance);
+
+    // Log event
+    TokensDistributed(_newTokens);
   }
 
   /**

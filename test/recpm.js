@@ -1,22 +1,24 @@
-const RPM = artifacts.require("./RPM.sol");
+const RECPM = artifacts.require("./RECPM.sol");
 
 const expectRequireFailure = require('./support/expectRequireFailure');
+const proxiedWeb3Handler = require('./support/proxiedWeb3Handler.js');
 
+contract('RECPM', function (accounts) {
 
-contract('RPM', function (accounts) {
-
-  let tokenInstance;
+  let tokenInstance, web3, proxiedWeb3;
 
   before(async function beforeTest() {
-    tokenInstance = await RPM.deployed();
+    web3 = RECPM.web3;
+    proxiedWeb3 = new Proxy(web3, proxiedWeb3Handler);
+    tokenInstance = await RECPM.deployed();
   });
 
   describe('proper instantiation', function () {
     it("ok", async function () {
       let name = await tokenInstance.name();
-      assert.equal(name, "RPM");
+      assert.equal(name, "RECPM");
       let symbol = await tokenInstance.symbol();
-      assert.equal(symbol, "RPM");
+      assert.equal(symbol, "RECPM");
       let decimals = await tokenInstance.decimals();
       assert.equal(decimals.toNumber(), 6);
       let totalSupply = await tokenInstance.totalSupply();
@@ -93,14 +95,16 @@ contract('RPM', function (accounts) {
 
   describe('add project addresses', function () {
     it("ok", async function () {
-      await tokenInstance.addProjectAddress(project_1, { from: accounts[0] });
+      // Project added by user 1
+      await tokenInstance.addProjectAddress(project_1, { from: accounts[1] });
 
       let projectAddress_1 = await tokenInstance.projectAddresses(0);
       assert.equal(projectAddress_1, project_1);
       let address_1_initialized = await tokenInstance.projectAddressInitialized(project_1);
       assert.equal(address_1_initialized, true);
 
-      await tokenInstance.addProjectAddress(project_2, { from: accounts[0] });
+      // Project added by user 5
+      await tokenInstance.addProjectAddress(project_2, { from: accounts[5] });
 
       let projectAddress_2 = await tokenInstance.projectAddresses(1);
       assert.equal(projectAddress_2, project_2);
@@ -115,7 +119,13 @@ contract('RPM', function (accounts) {
     });
 
     it("increases votesToUse", async function () {
-      await tokenInstance.distributeVotes(1000, { from: accounts[0] });
+      let results = await tokenInstance.distributeVotes(1000, { from: accounts[0] });
+
+      let log = results.logs[0];
+      let block = await proxiedWeb3.eth.getBlock(log.blockNumber);
+
+      let lastVotesDistributionTimestamp = await tokenInstance.lastVotesDistributionTimestamp();
+      assert.equal(lastVotesDistributionTimestamp.toNumber(), block.timestamp);
 
       let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
       assert.equal(votedToUse_0.toNumber(), 860);
@@ -156,7 +166,13 @@ contract('RPM', function (accounts) {
     });
 
     it("ok", async function () {
-      await tokenInstance.distributeTokens(1000 * Math.pow(10, 6), { from: accounts[0] });
+      let results = await tokenInstance.distributeTokens(1000 * Math.pow(10, 6), { from: accounts[0] });
+
+      let log = results.logs[0];
+      let block = await proxiedWeb3.eth.getBlock(log.blockNumber);
+
+      let lastTokensDistributionTimestamp = await tokenInstance.lastTokensDistributionTimestamp();
+      assert.equal(lastTokensDistributionTimestamp.toNumber(), block.timestamp);
 
       let totalSupply = await tokenInstance.totalSupply();
       assert.equal(totalSupply, 11000 * Math.pow(10, 6));
