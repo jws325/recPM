@@ -7,6 +7,9 @@ contract('RECPM', function (accounts) {
 
   let tokenInstance, web3, proxiedWeb3;
 
+  // Multiplier to represent 6 decimals
+  const T_MUL = 10 ** 6;
+
   before(async function beforeTest() {
     web3 = RECPM.web3;
     proxiedWeb3 = new Proxy(web3, proxiedWeb3Handler);
@@ -22,9 +25,9 @@ contract('RECPM', function (accounts) {
       let decimals = await tokenInstance.decimals();
       assert.equal(decimals.toNumber(), 6);
       let totalSupply = await tokenInstance.totalSupply();
-      assert.equal(totalSupply.toNumber(), 10000 * 10 ** 6);
+      assert.equal(totalSupply.toNumber(), 10000 * T_MUL);
       let creatorBalance = await tokenInstance.balanceOf(accounts[0]);
-      assert.equal(creatorBalance.toNumber(), 10000 * 10 ** 6);
+      assert.equal(creatorBalance.toNumber(), 10000 * T_MUL);
 
       // check address initialized in token holders list
       let holderAddress_0 = await tokenInstance.holderAddresses(0);
@@ -36,13 +39,13 @@ contract('RECPM', function (accounts) {
 
   describe('transfer', function () {
     it("transferable to user 1", async function () {
-      await tokenInstance.transfer(accounts[1], 500 * Math.pow(10, 6), { from: accounts[0] });
+      await tokenInstance.transfer(accounts[1], 500 * T_MUL, { from: accounts[0] });
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
-      assert.equal(account_0_balance.toNumber(), 9500 * Math.pow(10, 6));
+      assert.equal(account_0_balance.toNumber(), 9500 * T_MUL);
 
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 500 * Math.pow(10, 6));
+      assert.equal(account_1_balance.toNumber(), 500 * T_MUL);
 
       // check address initialized in token holders list
       let holderAddress_1 = await tokenInstance.holderAddresses(1);
@@ -52,13 +55,13 @@ contract('RECPM', function (accounts) {
     });
 
     it("transferable to user 2", async function () {
-      await tokenInstance.transfer(accounts[2], 500 * Math.pow(10, 6), { from: accounts[0] });
+      await tokenInstance.transfer(accounts[2], 500 * T_MUL, { from: accounts[0] });
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
-      assert.equal(account_0_balance.toNumber(), 9000 * Math.pow(10, 6));
+      assert.equal(account_0_balance.toNumber(), 9000 * T_MUL);
 
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 500 * Math.pow(10, 6));
+      assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
 
       // check address initialized in token holders list
       let holderAddress_2 = await tokenInstance.holderAddresses(2);
@@ -68,25 +71,25 @@ contract('RECPM', function (accounts) {
     });
 
     it("cannot transfer more than balance", async function () {
-      await expectRequireFailure(() => tokenInstance.transfer(accounts[1], 12000 * Math.pow(10, 6), { from: accounts[0] }));
+      await expectRequireFailure(() => tokenInstance.transfer(accounts[1], 12000 * T_MUL, { from: accounts[0] }));
     });
   });
 
   describe('approve /transferFrom', function () {
     it("transferable to other preapproved user", async function () {
-      await tokenInstance.approve(accounts[1], 400 * Math.pow(10, 6), { from: accounts[0] });
+      await tokenInstance.approve(accounts[1], 400 * T_MUL, { from: accounts[0] });
 
-      await tokenInstance.transferFrom(accounts[0], accounts[1], 400 * Math.pow(10, 6), { from: accounts[1] });
+      await tokenInstance.transferFrom(accounts[0], accounts[1], 400 * T_MUL, { from: accounts[1] });
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
-      assert.equal(account_0_balance.toNumber(), 8600 * Math.pow(10, 6));
+      assert.equal(account_0_balance.toNumber(), 8600 * T_MUL);
 
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 900 * Math.pow(10, 6));
+      assert.equal(account_1_balance.toNumber(), 900 * T_MUL);
     });
 
     it("cannot transfer more than preapproved", async function () {
-      await expectRequireFailure(() => tokenInstance.transferFrom(accounts[0], accounts[1], 600 * Math.pow(10, 6), { from: accounts[1] }));
+      await expectRequireFailure(() => tokenInstance.transferFrom(accounts[0], accounts[1], 600 * T_MUL, { from: accounts[1] }));
     });
   });
 
@@ -162,11 +165,11 @@ contract('RECPM', function (accounts) {
 
   describe("distributeTokens", function () {
     it("not allowed if not owner", async function () {
-      await expectRequireFailure(() => tokenInstance.distributeTokens(1000 * Math.pow(10, 6), { from: accounts[1] }));
+      await expectRequireFailure(() => tokenInstance.distributeTokens(1000 * T_MUL, { from: accounts[1] }));
     });
 
     it("ok", async function () {
-      let results = await tokenInstance.distributeTokens(1000 * Math.pow(10, 6), { from: accounts[0] });
+      let results = await tokenInstance.distributeTokens(1000 * T_MUL, { from: accounts[0] });
 
       let log = results.logs[0];
       let block = await proxiedWeb3.eth.getBlock(log.blockNumber);
@@ -175,20 +178,20 @@ contract('RECPM', function (accounts) {
       assert.equal(lastTokensDistributionTimestamp.toNumber(), block.timestamp);
 
       let totalSupply = await tokenInstance.totalSupply();
-      assert.equal(totalSupply, 11000 * Math.pow(10, 6));
+      assert.equal(totalSupply, 11000 * T_MUL);
 
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 750 * Math.pow(10, 6));
+      assert.equal(project_1_balance.toNumber(), 750 * T_MUL);
 
       let project_2_balance = await tokenInstance.balanceOf(project_2);
-      assert.equal(project_2_balance.toNumber(), 250 * Math.pow(10, 6));
+      assert.equal(project_2_balance.toNumber(), 250 * T_MUL);
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
-      assert.equal(account_0_balance.toNumber(), 8600 * Math.pow(10, 6));
+      assert.equal(account_0_balance.toNumber(), 8600 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 900 * Math.pow(10, 6));
+      assert.equal(account_1_balance.toNumber(), 900 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 500 * Math.pow(10, 6));
+      assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
 
       // check votes reset
 
@@ -204,26 +207,54 @@ contract('RECPM', function (accounts) {
 
   describe("burn", function () {
     it("not allowed if not owner", async function () {
-      await expectRequireFailure(() => tokenInstance.burn(1000 * Math.pow(10, 6), { from: accounts[1] }));
+      await expectRequireFailure(() => tokenInstance.burn(1000 * T_MUL, { from: accounts[1] }));
     });
 
     it("ok", async function () {
-      await tokenInstance.burn(2000 * Math.pow(10, 6), { from: accounts[0] });
+      await tokenInstance.burn(2000 * T_MUL, { from: accounts[0] });
 
       let totalSupply = await tokenInstance.totalSupply();
-      assert.equal(totalSupply, 9000 * Math.pow(10, 6));
+      assert.equal(totalSupply, 9000 * T_MUL);
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
-      assert.equal(account_0_balance.toNumber(), 6600 * Math.pow(10, 6));
+      assert.equal(account_0_balance.toNumber(), 6600 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 900 * Math.pow(10, 6));
+      assert.equal(account_1_balance.toNumber(), 900 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 500 * Math.pow(10, 6));
+      assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 750 * Math.pow(10, 6));
+      assert.equal(project_1_balance.toNumber(), 750 * T_MUL);
       let project_2_balance = await tokenInstance.balanceOf(project_2);
-      assert.equal(project_2_balance.toNumber(), 250 * Math.pow(10, 6));
+      assert.equal(project_2_balance.toNumber(), 250 * T_MUL);
     });
   });
 
+  describe("createBounty", function () {
+    it("ok", async function () {
+      let deadlineBlockNumber = web3.eth.blockNumber + 5;
+      let bountyAmount = 100 * T_MUL;
+      await tokenInstance.createBounty(project_1, bountyAmount, deadlineBlockNumber, { from: accounts[1] });
+
+      let bountiesLength = await tokenInstance.getBountiesLength(project_1);
+      assert.equal(bountiesLength.toNumber(), 1);
+
+      let bountyData = await tokenInstance.getBountyData(project_1, 1);
+      assert.equal(bountyData[0].toNumber(), 1);
+      assert.equal(bountyData[1], accounts[1]);
+      assert.equal(bountyData[2].toNumber(), bountyAmount);
+      assert.equal(bountyData[3].toNumber(), deadlineBlockNumber);
+      assert.equal(bountyData[4], false);
+
+      // check transfer ok
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 800 * T_MUL);
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 100 * T_MUL);
+
+      // check lock ok
+      let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
+      assert.equal(account_1_locked_balance.toNumber(), 100 * T_MUL);
+
+    });
+  });
 });
