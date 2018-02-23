@@ -1,10 +1,9 @@
 pragma solidity ^0.4.18;
 
 import './zeppelin/SafeMath.sol';
-import './zeppelin/StandardToken.sol';
-import './zeppelin/Ownable.sol';
+import './zeppelin/PausableToken.sol';
 
-contract RECPM is StandardToken, Ownable {
+contract RECPM is PausableToken {
   using SafeMath for uint;
 
   /*
@@ -12,12 +11,18 @@ contract RECPM is StandardToken, Ownable {
    */
   event VotesDistributed(uint _amount);
   event TokensDistributed(uint _amount);
+  event PauseVoting();
+  event UnpauseVoting();
   event NewBounty(address _projectAddress, uint _bountyId);
+  event NewBountyAddition(address _projectAddress, uint _bountyId);
+  event NewBountyClaim(address _projectAddress, uint _bountyId, uint _bountyClaimId);
+  event BountyClaimAccepted(address _projectAddress, uint _bountyId, uint _bountyClaimId);
 
   /*
    * Storage
    */
 
+  // Token Info
   string public name = "RECPM";
   string public symbol = "RECPM";
   uint256 public decimals = 6;
@@ -26,13 +31,20 @@ contract RECPM is StandardToken, Ownable {
   mapping(address => bool) public holderAddressInitialized;
   address[] public holderAddresses;
 
-  mapping(address => uint) public upvotesReceivedThisWeek;
-
   // structures to keep track of project addresses
   mapping(address => bool) public projectAddressInitialized;
   address[] public projectAddresses;
 
+
+  /** START Voting Variables **/
+
+  mapping(address => uint) public upvotesReceivedThisWeek;
   uint public totalUpvotesReceivedThisWeek;
+
+  // variables to control distributions pagination
+  uint public pageSize = 1000;
+  uint public votesDistributionPage;
+  uint public tokensDistributionPage;
 
   uint public lastVotesDistributionTimestamp;
   uint public lastTokensDistributionTimestamp;
@@ -40,10 +52,17 @@ contract RECPM is StandardToken, Ownable {
   // votes to use
   mapping(address => uint) public votesToUse;
 
-  // Bounty Features Data
+  bool public votingPaused = false;
+
+
+  /** END Bounty Variables **/
+
+
+  /** START Bounty Variables **/
 
   struct Bounty {
-    uint bountyId;  // bountyId will start from 1 and each new bounty will increment by 1.
+    // For each project, bountyId will start from 1 and each new bounty will increment by 1.
+    uint bountyId;
     address bountyCreator;
     uint bountyAmount;
     uint deadlineBlockNumber;
@@ -51,11 +70,15 @@ contract RECPM is StandardToken, Ownable {
   }
 
   struct BountyAddition {
+    uint bountyId;
     address adderAddress;
     uint addedBountyAmount;
   }
 
   struct BountyClaim {
+    // For each project, bountyClaimId will start from 1 and each new bounty will increment by 1.
+    uint bountyClaimId;
+    uint bountyId;
     address claimerAddress;
     bool successfulClaim;
   }
@@ -63,12 +86,36 @@ contract RECPM is StandardToken, Ownable {
   // locked balances per address
   mapping(address => uint256) public bountyLockedBalances;
 
+  // mapping project address => Bounties
   mapping(address => Bounty[]) public bountyMap;
+  // mapping project address => Bounty Claims
+  mapping(address => BountyClaim[]) public bountyClaimMap;
+  // mapping project address => bounty id => Bounty additions
+  mapping(address => mapping(uint => BountyAddition[])) public bountyAdditionMap;
 
-  // mapping bounty id => Bounty additions
-  mapping(uint => BountyAddition[]) public bountyAdditionMap;
-  // mapping bounty id => Bounty claims
-  mapping(uint => BountyClaim[]) public bountyClaimMap;
+
+  /** END Bounty Variables **/
+
+
+  /*
+   * Modifiers
+   */
+
+  /**
+   * @dev Modifier to make a function callable only when the voting is not paused.
+   */
+  modifier whenVotingNotPaused() {
+    require(!votingPaused);
+    _;
+  }
+
+  /**
+   * @dev Modifier to make a function callable only when the voting is paused.
+   */
+  modifier whenVotingPaused() {
+    require(votingPaused);
+    _;
+  }
 
   /*
    * Functions
@@ -78,7 +125,7 @@ contract RECPM is StandardToken, Ownable {
   * @dev Contract constructor
   * @param _totalSupply Initial Token Supply
   */
-  function RECPM(uint256 _totalSupply) public {
+  function RECPM(uint _totalSupply) public {
     totalSupply = _totalSupply;
 
     // allocate initial supply to creator
@@ -106,23 +153,47 @@ contract RECPM is StandardToken, Ownable {
     // 7 days minimum between distributions
     require(now >= lastVotesDistributionTimestamp + 7 days);
 
-    for (uint i = 0; i < holderAddresses.length; i++) {
-      address holderAddress = holderAddresses[i];
-      votesToUse[holderAddress] = votesToUse[holderAddress].add(balanceOf(holderAddress).mul(_votesToDistribute).div(totalSupply));
+    if (votesDistributionPage == 0) {
+      // distribution is starting, pause token transfers
+      pause();
     }
 
-    // update timestamp;
-    lastVotesDistributionTimestamp = now;
+    uint startingIndex = votesDistributionPage * pageSize;
+    uint endingIndex = startingIndex + pageSize;
 
-    // Log event
-    VotesDistributed(_votesToDistribute);
+    for (uint i = startingIndex; i < endingIndex; i++) {
+      if (i < holderAddresses.length) {
+        address holderAddress = holderAddresses[i];
+        votesToUse[holderAddress] = votesToUse[holderAddress].add(balanceOf(holderAddress).mul(_votesToDistribute).div(totalSupply));
+      }
+      else {
+        //we've updated all of the holder addresses
+
+        // update timestamp;
+        lastVotesDistributionTimestamp = now;
+
+        // Log event
+        VotesDistributed(_votesToDistribute);
+
+        // Reset the page
+        votesDistributionPage = 0;
+
+        // Now we're done distributing the votes for the week
+        // distribution is ending, unpause token transfers
+        unpause();
+        return;
+      }
+    }
+
+    // if we get here, we increment page and return, then call the function again in the next block to process the next page
+    votesDistributionPage = votesDistributionPage.add(1);
   }
 
   /**
    * @dev Vote
    * @param _projectAddress Project address
    */
-  function vote(address _projectAddress) public {
+  function vote(address _projectAddress) whenVotingNotPaused public {
     require(votesToUse[msg.sender] > 0);
     // check project is in the list
     require(projectAddressInitialized[_projectAddress]);
@@ -136,6 +207,23 @@ contract RECPM is StandardToken, Ownable {
   }
 
   /**
+   * @dev called by the owner to pause voting
+   */
+  function pauseVoting() onlyOwner whenVotingNotPaused public {
+    votingPaused = true;
+    PauseVoting();
+  }
+
+  /**
+   * @dev called by the owner to unpause voting
+   */
+  function unpauseVoting() onlyOwner whenVotingPaused public {
+    votingPaused = false;
+    UnpauseVoting();
+  }
+
+
+  /**
    * @dev Distribute Tokens
    * @param _newTokens Amount of tokens to distribute
    */
@@ -145,28 +233,52 @@ contract RECPM is StandardToken, Ownable {
     // 7 days minimum between distributions
     require(now >= lastTokensDistributionTimestamp + 7 days);
 
-    uint previousOwnerBalance = balanceOf(owner);
+    if (tokensDistributionPage == 0) {
+      // distribution is starting, pause token transfers
+      pauseVoting();
 
-    // mint tokens to owner
-    increaseSupply(_newTokens, owner);
-
-    for (uint i = 0; i < projectAddresses.length; i++) {
-      address projectAddress = projectAddresses[i];
-      uint tokensToTransfer = upvotesReceivedThisWeek[projectAddress].mul(_newTokens).div(totalUpvotesReceivedThisWeek);
-      transfer(projectAddress, tokensToTransfer);
-      upvotesReceivedThisWeek[projectAddress] = 0;
+      // mint tokens to owner
+      increaseSupply(_newTokens, owner);
     }
 
-    // reset total votes
-    totalUpvotesReceivedThisWeek = 0;
-    // update timestamp;
-    lastTokensDistributionTimestamp = now;
+    uint startingIndex = tokensDistributionPage * pageSize;
+    uint endingIndex = startingIndex + pageSize;
 
-    // make sure we didn't redistribute more tokens than created
-    assert(balanceOf(owner) >= previousOwnerBalance);
+    for (uint i = startingIndex; i < endingIndex; i++) {
+      if (i < projectAddresses.length) {
+        address projectAddress = projectAddresses[i];
 
-    // Log event
-    TokensDistributed(_newTokens);
+        uint tokensToTransfer = upvotesReceivedThisWeek[projectAddress].mul(_newTokens).div(totalUpvotesReceivedThisWeek);
+        // transfer tokens
+        transfer(projectAddress, tokensToTransfer);
+
+        // reset upvotes
+        upvotesReceivedThisWeek[projectAddress] = 0;
+      }
+      else {
+        //we've updated all of the projects
+
+        // reset total votes
+        totalUpvotesReceivedThisWeek = 0;
+
+        // update timestamp;
+        lastTokensDistributionTimestamp = now;
+
+        // Log event
+        TokensDistributed(_newTokens);
+
+        // Reset the page
+        tokensDistributionPage = 0;
+
+        // Now we're done distributing the votes for the week
+        // distribution is ending, unpause voting
+        unpauseVoting();
+        return;
+      }
+    }
+
+    // if we get here, we increment page and return, then call the function again in the next block to process the next page
+    tokensDistributionPage = tokensDistributionPage.add(1);
   }
 
   /**
@@ -228,6 +340,15 @@ contract RECPM is StandardToken, Ownable {
   }
 
   /**
+   * @dev Set Page Size (needed in case of block gas limit issues)
+   * @param _pageSize Page Size
+   */
+  function setPageSize(uint _pageSize) public onlyOwner {
+    require(_pageSize > 0);
+    pageSize = _pageSize;
+  }
+
+  /**
    * @dev Create Bounty
    * @param _projectAddress Project Address
    * @param _amount Amount
@@ -250,6 +371,10 @@ contract RECPM is StandardToken, Ownable {
     NewBounty(_projectAddress, bountyId);
   }
 
+  /**
+   * @dev Transfer tokens and lock them for bounty
+   * @param _amount Amount
+   */
   function transferAndLockForBounty(uint _amount) internal {
     // transfer
     transfer(this, _amount);
@@ -276,61 +401,80 @@ contract RECPM is StandardToken, Ownable {
     // transfer and lock the tokens
     transferAndLockForBounty(_amount);
 
-    bountyAdditionMap[_bountyId].push(BountyAddition( msg.sender, _amount));
+    bountyAdditionMap[_projectAddress][_bountyId - 1].push(BountyAddition(_bountyId, msg.sender, _amount));
+
+    NewBountyAddition(_projectAddress, _bountyId);
   }
 
-  function getActiveBounties(address _projectAddress) public returns (Bounty[]) {
+  /**
+   * @dev Create Bounty Claim
+   * @param _projectAddress Project Address
+   * @param _bountyId Bounty Id
+   */
+  function createBountyClaim(address _projectAddress, uint _bountyId) public {
+    // check bounty not claimed
+    require(!bountyMap[_projectAddress][_bountyId - 1].successfullyClaimed);
+    // check bounty not expired
+    require(bountyMap[_projectAddress][_bountyId - 1].deadlineBlockNumber > block.number);
+
+    // save bounty claim
+    uint bountyClaimId = getNextBountyClaimId(_projectAddress);
+    bountyClaimMap[_projectAddress].push(BountyClaim(bountyClaimId, _bountyId, msg.sender, false));
+
+    // log event
+    NewBountyClaim(_projectAddress, _bountyId, bountyClaimId);
+  }
+
+  /**
+   * @dev Accept Bounty Claim
+   * @param _projectAddress Project Address
+   * @param _bountyClaimId Bounty Claim Id
+   */
+  function acceptBountyClaim(address _projectAddress, uint _bountyClaimId) public {
     require(_projectAddress != address(0));
-    Bounty[] storage activeBounties;
 
-    for (uint256 i = 0; i < bountyMap[_projectAddress].length; i++) {
-      uint bountyId = bountyMap[_projectAddress][i].bountyId;
+    BountyClaim storage bountyClaim = bountyClaimMap[_projectAddress][_bountyClaimId - 1];
+    Bounty storage bounty = bountyMap[_projectAddress][bountyClaim.bountyId - 1];
 
-      if (bountyMap[_projectAddress][i].successfullyClaimed != true && bountyMap[_projectAddress][i].deadlineBlockNumber > now) {
-
-        address bountyCreator = bountyMap[_projectAddress][i].bountyCreator;
-        uint amount = bountyMap[_projectAddress][i].bountyAmount;
-        uint deadlineBlockNumber = bountyMap[_projectAddress][i].deadlineBlockNumber;
-
-        for (uint256 j = 0; j < bountyAdditionMap[bountyId].length; j++) {
-          amount += bountyAdditionMap[bountyId][j].addedBountyAmount;
-        }
-
-        Bounty memory newBounty = Bounty(bountyId, bountyCreator, amount, deadlineBlockNumber, false);
-        activeBounties.push(newBounty);
-      }
-    }
-
-    return activeBounties;
-  }
-
-  function createBountyClaim(uint _bountyId) public {
-    bountyClaimMap[_bountyId].push(BountyClaim(msg.sender, false));
-  }
-
-  function acceptBountyClaim(address _projectAddress, uint _bountyId, uint _bountyClaimId) public {
-    require(_projectAddress != address(0));
-    Bounty storage bounty = bountyMap[_projectAddress][_bountyId];
-
-    //Maybe make modifier
+    // check bounty not claimed
+    require(!bounty.successfullyClaimed);
+    // check bounty not expired
+    require(bounty.deadlineBlockNumber > block.number);
+    // check sender is creator
     require(bounty.bountyCreator == msg.sender);
 
-    bounty.successfullyClaimed = true;
-    BountyClaim[] storage bountyClaim = bountyClaimMap[_bountyId];
-    bountyClaim[_bountyClaimId].successfulClaim = true;
+    // transfer main bounty tokens
+    bountyLockedBalances[bounty.bountyCreator] = bountyLockedBalances[bounty.bountyCreator].sub(bounty.bountyAmount);
+    balances[this] = balances[this].sub(bounty.bountyAmount);
+    balances[bountyClaim.claimerAddress] = balances[bountyClaim.claimerAddress].add(bounty.bountyAmount.mul(9).div(10));
+    balances[owner] = balances[owner].add(bounty.bountyAmount.mul(1).div(10));
 
-    //send tokens
-    uint amount = bounty.bountyAmount;
-    bounty.bountyAmount = 0;
-    //Review
+    uint amountToClaimer = bounty.bountyAmount.mul(9).div(10);
+    uint amountToOwner = bounty.bountyAmount.mul(1).div(10);
 
-    //Get all additional bounties too
-    for (uint i = 0; i < bountyAdditionMap[_bountyId].length; i++) {
-      amount += bountyAdditionMap[_bountyId][i].addedBountyAmount;
-      bountyAdditionMap[_bountyId][i].addedBountyAmount = 0;
-      //Review
+    // transfer bounty additions
+    for (uint i = 0; i < bountyAdditionMap[_projectAddress][bountyClaim.bountyId - 1].length; i++) {
+      BountyAddition memory bountyAddition = bountyAdditionMap[_projectAddress][bountyClaim.bountyId - 1][i];
+
+      bountyLockedBalances[bountyAddition.adderAddress] = bountyLockedBalances[bountyAddition.adderAddress].sub(bountyAddition.addedBountyAmount);
+      balances[this] = balances[this].sub(bountyAddition.addedBountyAmount);
+      balances[bountyClaim.claimerAddress] = balances[bountyClaim.claimerAddress].add(bountyAddition.addedBountyAmount.mul(9).div(10));
+      balances[owner] = balances[owner].add(bountyAddition.addedBountyAmount.mul(1).div(10));
+
+      amountToClaimer = amountToClaimer.add(bountyAddition.addedBountyAmount.mul(9).div(10));
+      amountToOwner = amountToClaimer.add(bountyAddition.addedBountyAmount.mul(1).div(10));
     }
 
+    // log transfer
+    Transfer(this, bountyClaim.claimerAddress, amountToClaimer);
+    Transfer(this, owner, amountToOwner);
+
+    // mark as claimed
+    bounty.successfullyClaimed = true;
+    bountyClaim.successfulClaim = true;
+
+    // log event
+    BountyClaimAccepted(_projectAddress, bountyClaim.bountyId, bountyClaim.bountyClaimId);
   }
 
   function refundBounty(address _projectAddress, uint _bountyId) public {
@@ -339,7 +483,7 @@ contract RECPM is StandardToken, Ownable {
 
     require(bounty.bountyCreator == msg.sender);
     require(bounty.successfullyClaimed == false);
-    require(bounty.deadlineBlockNumber > now);
+    require(bounty.deadlineBlockNumber > block.number);
 
     uint amount = bounty.bountyAmount;
     bounty.bountyAmount = 0;
@@ -347,9 +491,9 @@ contract RECPM is StandardToken, Ownable {
     //balances[bounty.bountyCreator] = balances[bounty.bountyCreator].add(amount);
 
     //Refund all additional bounties too
-    for (uint i = 0; i < bountyAdditionMap[_bountyId].length; i++) {
-      amount += bountyAdditionMap[_bountyId][i].addedBountyAmount;
-      bountyAdditionMap[_bountyId][i].addedBountyAmount = 0;
+    for (uint i = 0; i < bountyAdditionMap[_projectAddress][_bountyId - 1].length; i++) {
+      amount += bountyAdditionMap[_projectAddress][_bountyId - 1][i].addedBountyAmount;
+      bountyAdditionMap[_projectAddress][_bountyId - 1][i].addedBountyAmount = 0;
       //Review
     }
   }
@@ -362,13 +506,57 @@ contract RECPM is StandardToken, Ownable {
   }
 
   /**
+   * @dev Get Next Bounty Claim Id
+   */
+  function getNextBountyClaimId(address _projectAddress) public constant returns (uint) {
+    return getBountyClaimsLength(_projectAddress).add(1);
+  }
+
+  /**
    * @dev Get Bounty Data
    */
   function getBountyData(address _projectAddress, uint _bountyId) public constant
-  returns (uint, address, uint, uint, bool) {
+  returns (uint, address, uint, uint, bool, uint, bool) {
     Bounty memory bounty = bountyMap[_projectAddress][_bountyId - 1];
 
-    return (bounty.bountyId, bounty.bountyCreator, bounty.bountyAmount, bounty.deadlineBlockNumber, bounty.successfullyClaimed);
+    uint currentBountyAmount = getCurrentBountyAmount(_projectAddress, _bountyId);
+
+    return (bounty.bountyId, bounty.bountyCreator, bounty.bountyAmount, bounty.deadlineBlockNumber, bounty.successfullyClaimed,
+    currentBountyAmount, !bounty.successfullyClaimed && bounty.deadlineBlockNumber > block.number);
+  }
+
+  /**
+   * @dev Get Current bounty amount
+   */
+  function getCurrentBountyAmount(address _projectAddress, uint _bountyId) public constant
+  returns (uint) {
+    uint currentBountyAmount = bountyMap[_projectAddress][_bountyId - 1].bountyAmount;
+
+    for (uint i = 0; i < bountyAdditionMap[_projectAddress][_bountyId - 1].length; i++) {
+      currentBountyAmount = currentBountyAmount.add(bountyAdditionMap[_projectAddress][_bountyId - 1][i].addedBountyAmount);
+    }
+
+    return (currentBountyAmount);
+  }
+
+  /**
+   * @dev Get Bounty Addition Data
+   */
+  function getBountyAdditionData(address _projectAddress, uint _bountyId, uint _index) public constant
+  returns (uint, address, uint){
+    BountyAddition memory bountyAddition = bountyAdditionMap[_projectAddress][_bountyId - 1][_index];
+
+    return (bountyAddition.bountyId, bountyAddition.adderAddress, bountyAddition.addedBountyAmount);
+  }
+
+  /**
+    * @dev Get Bounty Clain Data
+    */
+  function getBountyClaimData(address _projectAddress, uint _bountyClaimId) public constant
+  returns (uint, uint, address, bool){
+    BountyClaim memory bountyClaim = bountyClaimMap[_projectAddress][_bountyClaimId - 1];
+
+    return (bountyClaim.bountyClaimId, bountyClaim.bountyId, bountyClaim.claimerAddress, bountyClaim.successfulClaim);
   }
 
   /**
@@ -378,4 +566,18 @@ contract RECPM is StandardToken, Ownable {
     return bountyMap[_projectAddress].length;
   }
 
+  /**
+   * @dev Get Number of Bounties for a project
+   */
+  function getBountyAdditionsLength(address _projectAddress, uint _bountyId) public constant returns (uint) {
+    return bountyAdditionMap[_projectAddress][_bountyId - 1].length;
+  }
+
+
+  /**
+   * @dev Get Number of Bounties for a project
+   */
+  function getBountyClaimsLength(address _projectAddress) public constant returns (uint) {
+    return bountyClaimMap[_projectAddress].length;
+  }
 }

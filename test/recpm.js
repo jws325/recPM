@@ -24,6 +24,8 @@ contract('RECPM', function (accounts) {
       assert.equal(symbol, "RECPM");
       let decimals = await tokenInstance.decimals();
       assert.equal(decimals.toNumber(), 6);
+      let pageSize = await tokenInstance.pageSize();
+      assert.equal(pageSize.toNumber(), 1000);
       let totalSupply = await tokenInstance.totalSupply();
       assert.equal(totalSupply.toNumber(), 10000 * T_MUL);
       let creatorBalance = await tokenInstance.balanceOf(accounts[0]);
@@ -36,6 +38,7 @@ contract('RECPM', function (accounts) {
       assert.equal(address_0_initialized, true);
     });
   });
+
 
   describe('transfer', function () {
     it("transferable to user 1", async function () {
@@ -75,6 +78,19 @@ contract('RECPM', function (accounts) {
     });
   });
 
+  describe('setPageSize', function () {
+    it("only owner can call", async function () {
+      await expectRequireFailure(() => tokenInstance.setPageSize(2, { from: accounts[1] }));
+    });
+
+    it("ok", async function () {
+      await tokenInstance.setPageSize(2, { from: accounts[0] });
+
+      let pageSize = await tokenInstance.pageSize();
+      assert.equal(pageSize.toNumber(), 2);
+    });
+  });
+
   describe('approve /transferFrom', function () {
     it("transferable to other preapproved user", async function () {
       await tokenInstance.approve(accounts[1], 400 * T_MUL, { from: accounts[0] });
@@ -93,8 +109,9 @@ contract('RECPM', function (accounts) {
     });
   });
 
-  let project_1 = accounts[8];
-  let project_2 = accounts[9];
+  let project_1 = "0x0000000000000000000000000000000000000001";
+  let project_2 = "0x0000000000000000000000000000000000000002";
+  let project_3 = "0x0000000000000000000000000000000000000003";
 
   describe('add project addresses', function () {
     it("ok", async function () {
@@ -106,29 +123,62 @@ contract('RECPM', function (accounts) {
       let address_1_initialized = await tokenInstance.projectAddressInitialized(project_1);
       assert.equal(address_1_initialized, true);
 
-      // Project added by user 5
+      // Projects added by user 5
       await tokenInstance.addProjectAddress(project_2, { from: accounts[5] });
 
       let projectAddress_2 = await tokenInstance.projectAddresses(1);
       assert.equal(projectAddress_2, project_2);
       let address_2_initialized = await tokenInstance.projectAddressInitialized(project_2);
       assert.equal(address_2_initialized, true);
+
+      await tokenInstance.addProjectAddress(project_3, { from: accounts[5] });
+
+      let projectAddress_3 = await tokenInstance.projectAddresses(2);
+      assert.equal(projectAddress_3, project_3);
+      let address_3_initialized = await tokenInstance.projectAddressInitialized(project_3);
+      assert.equal(address_3_initialized, true);
     });
   });
 
-  describe("distributeVotes", function () {
+  describe("distributeVotes with pagination and pausing", function () {
+    let amountToDistribute = 1000;
+
     it("not allowed if not owner", async function () {
-      await expectRequireFailure(() => tokenInstance.distributeVotes(1000, { from: accounts[1] }));
+      await expectRequireFailure(() => tokenInstance.distributeVotes(amountToDistribute, { from: accounts[1] }));
     });
 
-    it("increases votesToUse", async function () {
-      let results = await tokenInstance.distributeVotes(1000, { from: accounts[0] });
+    it("increases votesToUse, first call , page 0", async function () {
+      let results = await tokenInstance.distributeVotes(amountToDistribute, { from: accounts[0] });
 
-      let log = results.logs[0];
-      let block = await proxiedWeb3.eth.getBlock(log.blockNumber);
+      let lastVotesDistributionTimestamp = await tokenInstance.lastVotesDistributionTimestamp();
+      assert.equal(lastVotesDistributionTimestamp.toNumber(), 0);
+
+      let votesDistributionPage = await tokenInstance.votesDistributionPage();
+      assert.equal(votesDistributionPage.toNumber(), 1);
+
+      let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
+      assert.equal(votedToUse_0.toNumber(), 860);
+      let votedToUse_1 = await tokenInstance.votesToUse(accounts[1]);
+      assert.equal(votedToUse_1.toNumber(), 90);
+      // not distributed yet
+      let votedToUse_2 = await tokenInstance.votesToUse(accounts[2]);
+      assert.equal(votedToUse_2.toNumber(), 0);
+    });
+
+    it("transfers fail during distribution", async function () {
+      await expectRequireFailure(() => tokenInstance.transfer(accounts[1], 500 * T_MUL, { from: accounts[0] }));
+    });
+
+    it("increases votesToUse, second call, page 1", async function () {
+      let results = await tokenInstance.distributeVotes(amountToDistribute, { from: accounts[0] });
+
+      let block = await proxiedWeb3.eth.getBlock(results.receipt.blockNumber);
 
       let lastVotesDistributionTimestamp = await tokenInstance.lastVotesDistributionTimestamp();
       assert.equal(lastVotesDistributionTimestamp.toNumber(), block.timestamp);
+
+      let votesDistributionPage = await tokenInstance.votesDistributionPage();
+      assert.equal(votesDistributionPage.toNumber(), 0);
 
       let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
       assert.equal(votedToUse_0.toNumber(), 860);
@@ -137,29 +187,39 @@ contract('RECPM', function (accounts) {
       let votedToUse_2 = await tokenInstance.votesToUse(accounts[2]);
       assert.equal(votedToUse_2.toNumber(), 50);
     });
+
+    it("increases votesToUse, third call fails (distribution already completed)", async function () {
+      await expectRequireFailure(() => tokenInstance.distributeVotes(amountToDistribute, { from: accounts[0] }));
+    });
+
   });
 
   describe("vote", function () {
     it("ok", async function () {
       await tokenInstance.vote(project_1, { from: accounts[0] });
-      await tokenInstance.vote(project_2, { from: accounts[0] });
       await tokenInstance.vote(project_1, { from: accounts[1] });
       await tokenInstance.vote(project_1, { from: accounts[2] });
+
+      await tokenInstance.vote(project_2, { from: accounts[0] });
+
+      await tokenInstance.vote(project_3, { from: accounts[2] });
 
       let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
       assert.equal(votedToUse_0.toNumber(), 858);
       let votedToUse_1 = await tokenInstance.votesToUse(accounts[1]);
       assert.equal(votedToUse_1.toNumber(), 89);
       let votedToUse_2 = await tokenInstance.votesToUse(accounts[2]);
-      assert.equal(votedToUse_2.toNumber(), 49);
+      assert.equal(votedToUse_2.toNumber(), 48);
 
       let upvotesReceivedThisWeek_1 = await tokenInstance.upvotesReceivedThisWeek(project_1);
       assert.equal(upvotesReceivedThisWeek_1.toNumber(), 3);
       let upvotesReceivedThisWeek_2 = await tokenInstance.upvotesReceivedThisWeek(project_2);
       assert.equal(upvotesReceivedThisWeek_2.toNumber(), 1);
+      let upvotesReceivedThisWeek_3 = await tokenInstance.upvotesReceivedThisWeek(project_3);
+      assert.equal(upvotesReceivedThisWeek_3.toNumber(), 1);
 
       let totalUpvotesReceivedThisWeek = await tokenInstance.totalUpvotesReceivedThisWeek();
-      assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 4);
+      assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 5);
     });
   });
 
@@ -168,23 +228,73 @@ contract('RECPM', function (accounts) {
       await expectRequireFailure(() => tokenInstance.distributeTokens(1000 * T_MUL, { from: accounts[1] }));
     });
 
-    it("ok", async function () {
+    it("first call , page 0", async function () {
       let results = await tokenInstance.distributeTokens(1000 * T_MUL, { from: accounts[0] });
 
-      let log = results.logs[0];
-      let block = await proxiedWeb3.eth.getBlock(log.blockNumber);
-
       let lastTokensDistributionTimestamp = await tokenInstance.lastTokensDistributionTimestamp();
-      assert.equal(lastTokensDistributionTimestamp.toNumber(), block.timestamp);
+      assert.equal(lastTokensDistributionTimestamp.toNumber(), 0);
+
+      let tokensDistributionPage = await tokenInstance.tokensDistributionPage();
+      assert.equal(tokensDistributionPage.toNumber(), 1);
 
       let totalSupply = await tokenInstance.totalSupply();
       assert.equal(totalSupply, 11000 * T_MUL);
 
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 750 * T_MUL);
+      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
 
       let project_2_balance = await tokenInstance.balanceOf(project_2);
-      assert.equal(project_2_balance.toNumber(), 250 * T_MUL);
+      assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
+
+      let project_3_balance = await tokenInstance.balanceOf(project_3);
+      assert.equal(project_3_balance.toNumber(), 0);
+
+      let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
+      assert.equal(account_0_balance.toNumber(), 8800 * T_MUL);
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 900 * T_MUL);
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
+
+      // check votes reset (for page 0)
+
+      let upvotesReceivedThisWeek_1 = await tokenInstance.upvotesReceivedThisWeek(project_1);
+      assert.equal(upvotesReceivedThisWeek_1.toNumber(), 0);
+      let upvotesReceivedThisWeek_2 = await tokenInstance.upvotesReceivedThisWeek(project_2);
+      assert.equal(upvotesReceivedThisWeek_2.toNumber(), 0);
+      let upvotesReceivedThisWeek_3 = await tokenInstance.upvotesReceivedThisWeek(project_3);
+      assert.equal(upvotesReceivedThisWeek_3.toNumber(), 1);
+
+      let totalUpvotesReceivedThisWeek = await tokenInstance.totalUpvotesReceivedThisWeek();
+      assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 5);
+    });
+
+    it("votes fail during distribution", async function () {
+      await expectRequireFailure(() => tokenInstance.vote(project_1, { from: accounts[0] }));
+    });
+
+    it("second call , page 1", async function () {
+      let results = await tokenInstance.distributeTokens(1000 * T_MUL, { from: accounts[0] });
+
+      let block = await proxiedWeb3.eth.getBlock(results.receipt.blockNumber);
+
+      let lastTokensDistributionTimestamp = await tokenInstance.lastTokensDistributionTimestamp();
+      assert.equal(lastTokensDistributionTimestamp.toNumber(), block.timestamp);
+
+      let tokensDistributionPage = await tokenInstance.tokensDistributionPage();
+      assert.equal(tokensDistributionPage.toNumber(), 0);
+
+      let totalSupply = await tokenInstance.totalSupply();
+      assert.equal(totalSupply, 11000 * T_MUL);
+
+      let project_1_balance = await tokenInstance.balanceOf(project_1);
+      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
+
+      let project_2_balance = await tokenInstance.balanceOf(project_2);
+      assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
+
+      let project_3_balance = await tokenInstance.balanceOf(project_3);
+      assert.equal(project_3_balance.toNumber(), 200 * T_MUL);
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 8600 * T_MUL);
@@ -199,10 +309,17 @@ contract('RECPM', function (accounts) {
       assert.equal(upvotesReceivedThisWeek_1.toNumber(), 0);
       let upvotesReceivedThisWeek_2 = await tokenInstance.upvotesReceivedThisWeek(project_2);
       assert.equal(upvotesReceivedThisWeek_2.toNumber(), 0);
+      let upvotesReceivedThisWeek_3 = await tokenInstance.upvotesReceivedThisWeek(project_3);
+      assert.equal(upvotesReceivedThisWeek_3.toNumber(), 0);
 
       let totalUpvotesReceivedThisWeek = await tokenInstance.totalUpvotesReceivedThisWeek();
       assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 0);
     });
+
+    it("third call fails (distribution already completed)", async function () {
+      await expectRequireFailure(() => tokenInstance.distributeTokens(1000 * T_MUL, { from: accounts[0] }));
+    });
+
   });
 
   describe("burn", function () {
@@ -223,15 +340,17 @@ contract('RECPM', function (accounts) {
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
       assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 750 * T_MUL);
+      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
       let project_2_balance = await tokenInstance.balanceOf(project_2);
-      assert.equal(project_2_balance.toNumber(), 250 * T_MUL);
+      assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
+      let project_3_balance = await tokenInstance.balanceOf(project_3);
+      assert.equal(project_3_balance.toNumber(), 200 * T_MUL);
     });
   });
 
   describe("createBounty", function () {
-    it("ok", async function () {
-      let deadlineBlockNumber = web3.eth.blockNumber + 5;
+    it("bounty 1", async function () {
+      let deadlineBlockNumber = web3.eth.blockNumber + 100;
       let bountyAmount = 100 * T_MUL;
       await tokenInstance.createBounty(project_1, bountyAmount, deadlineBlockNumber, { from: accounts[1] });
 
@@ -244,6 +363,8 @@ contract('RECPM', function (accounts) {
       assert.equal(bountyData[2].toNumber(), bountyAmount);
       assert.equal(bountyData[3].toNumber(), deadlineBlockNumber);
       assert.equal(bountyData[4], false);
+      assert.equal(bountyData[5], bountyAmount);
+      assert.equal(bountyData[6], true);
 
       // check transfer ok
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
@@ -254,7 +375,144 @@ contract('RECPM', function (accounts) {
       // check lock ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 100 * T_MUL);
-
     });
   });
+
+
+  describe("addToBounty", function () {
+    it("ok", async function () {
+      let bountyId = 1;
+
+      await tokenInstance.addToBounty(project_1, bountyId, 20 * T_MUL, { from: accounts[1] });
+      await tokenInstance.addToBounty(project_1, bountyId, 30 * T_MUL, { from: accounts[2] });
+
+      let bountyAdditionsLength = await tokenInstance.getBountyAdditionsLength(project_1, bountyId);
+      assert.equal(bountyAdditionsLength.toNumber(), 2);
+
+      let bountyAddition_1_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 0);
+      assert.equal(bountyAddition_1_Data[0].toNumber(), bountyId);
+      assert.equal(bountyAddition_1_Data[1], accounts[1]);
+      assert.equal(bountyAddition_1_Data[2].toNumber(), 20 * T_MUL);
+
+      let bountyAddition_2_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 1);
+      assert.equal(bountyAddition_2_Data[0].toNumber(), bountyId);
+      assert.equal(bountyAddition_2_Data[1], accounts[2]);
+      assert.equal(bountyAddition_2_Data[2].toNumber(), 30 * T_MUL);
+
+      // check transfer ok
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 780 * T_MUL);
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 150 * T_MUL);
+
+      // check lock ok
+      let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
+      assert.equal(account_1_locked_balance.toNumber(), 120 * T_MUL);
+      let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
+      assert.equal(account_2_locked_balance.toNumber(), 30 * T_MUL);
+    });
+
+  });
+
+  describe("getActiveBounties", function () {
+    it("ok", async function () {
+      let activeBounties = [];
+
+      let bountiesLength = await tokenInstance.getBountiesLength(project_1);
+      assert.equal(bountiesLength.toNumber(), 1);
+
+      for (i = 0; i < bountiesLength; i++) {
+        let bountyData = await tokenInstance.getBountyData(project_1, i + 1);
+
+        let bounty = {
+          id: bountyData[0].toNumber(),
+          bountyCreator: bountyData[1],
+          bountyAmount: bountyData[2].toNumber(),
+          deadlineBlockNumber: bountyData[3].toNumber(),
+          successfullyClaimed: bountyData[4],
+          currentBountyAmount: bountyData[5].toNumber(),
+          active: bountyData[6],
+        };
+
+        if (bounty.active) {
+          activeBounties.push(bounty);
+        }
+      }
+
+      assert.equal(activeBounties.length, 1);
+
+      assert.equal(activeBounties[0].id, 1);
+      assert.equal(activeBounties[0].bountyAmount, 100 * T_MUL);
+      assert.equal(activeBounties[0].currentBountyAmount, 150 * T_MUL);
+    });
+  });
+
+  describe("createBountyClaim", function () {
+    it("ok", async function () {
+      let bountyId = 1;
+      await tokenInstance.createBountyClaim(project_1, bountyId, { from: accounts[3] });
+
+      let bountyClaimsLength = await tokenInstance.getBountyClaimsLength(project_1);
+      assert.equal(bountyClaimsLength.toNumber(), 1);
+
+      let bountyClaimData = await tokenInstance.getBountyClaimData(project_1, 1);
+      assert.equal(bountyClaimData[0].toNumber(), 1);
+      assert.equal(bountyClaimData[1].toNumber(), 1);
+      assert.equal(bountyClaimData[2], accounts[3]);
+      assert.equal(bountyClaimData[3], false);
+    });
+  });
+
+
+  describe("acceptBountyClaim", function () {
+    let bountyClaimId = 1;
+
+    it("not allowed if not bounty creator", async function () {
+      await expectRequireFailure(() => tokenInstance.acceptBountyClaim(project_1, bountyClaimId, { from: accounts[2] }));
+    });
+
+    it("ok", async function () {
+      // check balances before claim
+      let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
+      assert.equal(account_0_balance.toNumber(), 6600 * T_MUL);
+      let account_3_balance = await tokenInstance.balanceOf(accounts[3]);
+      assert.equal(account_3_balance.toNumber(), 0);
+
+      await tokenInstance.acceptBountyClaim(project_1, bountyClaimId, { from: accounts[1] });
+
+      // check transfer ok
+      account_0_balance = await tokenInstance.balanceOf(accounts[0]);
+      assert.equal(account_0_balance.toNumber(), 6615 * T_MUL);
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 780 * T_MUL);
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      account_3_balance = await tokenInstance.balanceOf(accounts[3]);
+      assert.equal(account_3_balance.toNumber(), 135 * T_MUL);
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 0);
+
+      // check lock ok
+      let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
+      assert.equal(account_1_locked_balance.toNumber(), 0);
+      let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
+      assert.equal(account_2_locked_balance.toNumber(), 0);
+
+      // check claim marked successful
+      let bountyClaimData = await tokenInstance.getBountyClaimData(project_1, 1);
+      assert.equal(bountyClaimData[3], true);
+
+      // check claimed and therefore inactive
+      let bountyData = await tokenInstance.getBountyData(project_1, 1);
+      assert.equal(bountyData[4], true);
+      assert.equal(bountyData[6], false);
+
+    });
+
+
+  });
+
+
 });
