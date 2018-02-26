@@ -652,6 +652,8 @@ contract('RECPM', function (accounts) {
       assert.equal(bountyData[6], false);
       assert.equal(bountyData[7], true);
 
+      // claiming refund twice fails
+      await expectRequireFailure(() => tokenInstance.refundMyBountyShare(project_1, bountyId, { from: accounts[2] }));
 
       // Account 1 claims refund
       await tokenInstance.refundMyBountyShare(project_1, bountyId, { from: accounts[1] });
@@ -688,6 +690,9 @@ contract('RECPM', function (accounts) {
       assert.equal(bountyData[4], false);
       assert.equal(bountyData[6], false);
       assert.equal(bountyData[7], true);
+
+      // claiming refund twice fails
+      await expectRequireFailure(() => tokenInstance.refundMyBountyShare(project_1, bountyId, { from: accounts[1] }));
     });
 
   });
