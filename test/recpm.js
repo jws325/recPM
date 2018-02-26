@@ -2,6 +2,7 @@ const RECPM = artifacts.require("./RECPM.sol");
 
 const expectRequireFailure = require('./support/expectRequireFailure');
 const proxiedWeb3Handler = require('./support/proxiedWeb3Handler.js');
+const sleep = require('./support/sleep.js');
 
 contract('RECPM', function (accounts) {
 
@@ -365,6 +366,7 @@ contract('RECPM', function (accounts) {
       assert.equal(bountyData[4], false);
       assert.equal(bountyData[5], bountyAmount);
       assert.equal(bountyData[6], true);
+      assert.equal(bountyData[7], false);
 
       // check transfer ok
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
@@ -376,11 +378,40 @@ contract('RECPM', function (accounts) {
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 100 * T_MUL);
     });
+
+    it("bounty 2", async function () {
+      let deadlineBlockNumber = web3.eth.blockNumber + 30;
+      let bountyAmount = 200 * T_MUL;
+      await tokenInstance.createBounty(project_1, bountyAmount, deadlineBlockNumber, { from: accounts[2] });
+
+      let bountiesLength = await tokenInstance.getBountiesLength(project_1);
+      assert.equal(bountiesLength.toNumber(), 2);
+
+      let bountyData = await tokenInstance.getBountyData(project_1, 2);
+      assert.equal(bountyData[0].toNumber(), 2);
+      assert.equal(bountyData[1], accounts[2]);
+      assert.equal(bountyData[2].toNumber(), bountyAmount);
+      assert.equal(bountyData[3].toNumber(), deadlineBlockNumber);
+      assert.equal(bountyData[4], false);
+      assert.equal(bountyData[5], bountyAmount);
+      assert.equal(bountyData[6], true);
+      assert.equal(bountyData[7], false);
+
+      // check transfer ok
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 300 * T_MUL);
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 300 * T_MUL);
+
+      // check lock ok
+      let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
+      assert.equal(account_2_locked_balance.toNumber(), 200 * T_MUL);
+    });
   });
 
 
   describe("addToBounty", function () {
-    it("ok", async function () {
+    it("bounty 1 ", async function () {
       let bountyId = 1;
 
       await tokenInstance.addToBounty(project_1, bountyId, 20 * T_MUL, { from: accounts[1] });
@@ -393,25 +424,63 @@ contract('RECPM', function (accounts) {
       assert.equal(bountyAddition_1_Data[0].toNumber(), bountyId);
       assert.equal(bountyAddition_1_Data[1], accounts[1]);
       assert.equal(bountyAddition_1_Data[2].toNumber(), 20 * T_MUL);
+      assert.equal(bountyAddition_1_Data[3], false);
 
       let bountyAddition_2_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 1);
       assert.equal(bountyAddition_2_Data[0].toNumber(), bountyId);
       assert.equal(bountyAddition_2_Data[1], accounts[2]);
       assert.equal(bountyAddition_2_Data[2].toNumber(), 30 * T_MUL);
+      assert.equal(bountyAddition_2_Data[3], false);
 
       // check transfer ok
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
       assert.equal(account_1_balance.toNumber(), 780 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 270 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 150 * T_MUL);
+      assert.equal(token_contract_balance.toNumber(), 350 * T_MUL);
 
       // check lock ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 120 * T_MUL);
       let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
-      assert.equal(account_2_locked_balance.toNumber(), 30 * T_MUL);
+      assert.equal(account_2_locked_balance.toNumber(), 230 * T_MUL);
+    });
+
+    it("bounty 2 ", async function () {
+      let bountyId = 2;
+
+      await tokenInstance.addToBounty(project_1, bountyId, 10 * T_MUL, { from: accounts[1] });
+      await tokenInstance.addToBounty(project_1, bountyId, 15 * T_MUL, { from: accounts[2] });
+
+      let bountyAdditionsLength = await tokenInstance.getBountyAdditionsLength(project_1, bountyId);
+      assert.equal(bountyAdditionsLength.toNumber(), 2);
+
+      let bountyAddition_1_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 0);
+      assert.equal(bountyAddition_1_Data[0].toNumber(), bountyId);
+      assert.equal(bountyAddition_1_Data[1], accounts[1]);
+      assert.equal(bountyAddition_1_Data[2].toNumber(), 10 * T_MUL);
+      assert.equal(bountyAddition_1_Data[3], false);
+
+      let bountyAddition_2_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 1);
+      assert.equal(bountyAddition_2_Data[0].toNumber(), bountyId);
+      assert.equal(bountyAddition_2_Data[1], accounts[2]);
+      assert.equal(bountyAddition_2_Data[2].toNumber(), 15 * T_MUL);
+      assert.equal(bountyAddition_2_Data[3], false);
+
+      // check transfer ok
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 770 * T_MUL);
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 255 * T_MUL);
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 375 * T_MUL);
+
+      // check lock ok
+      let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
+      assert.equal(account_1_locked_balance.toNumber(), 130 * T_MUL);
+      let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
+      assert.equal(account_2_locked_balance.toNumber(), 245 * T_MUL);
     });
 
   });
@@ -421,7 +490,7 @@ contract('RECPM', function (accounts) {
       let activeBounties = [];
 
       let bountiesLength = await tokenInstance.getBountiesLength(project_1);
-      assert.equal(bountiesLength.toNumber(), 1);
+      assert.equal(bountiesLength.toNumber(), 2);
 
       for (i = 0; i < bountiesLength; i++) {
         let bountyData = await tokenInstance.getBountyData(project_1, i + 1);
@@ -432,8 +501,9 @@ contract('RECPM', function (accounts) {
           bountyAmount: bountyData[2].toNumber(),
           deadlineBlockNumber: bountyData[3].toNumber(),
           successfullyClaimed: bountyData[4],
-          currentBountyAmount: bountyData[5].toNumber(),
+          totalBountyAmount: bountyData[5].toNumber(),
           active: bountyData[6],
+          refunded: bountyData[7],
         };
 
         if (bounty.active) {
@@ -441,11 +511,15 @@ contract('RECPM', function (accounts) {
         }
       }
 
-      assert.equal(activeBounties.length, 1);
+      assert.equal(activeBounties.length, 2);
 
       assert.equal(activeBounties[0].id, 1);
       assert.equal(activeBounties[0].bountyAmount, 100 * T_MUL);
-      assert.equal(activeBounties[0].currentBountyAmount, 150 * T_MUL);
+      assert.equal(activeBounties[0].totalBountyAmount, 150 * T_MUL);
+
+      assert.equal(activeBounties[1].id, 2);
+      assert.equal(activeBounties[1].bountyAmount, 200 * T_MUL);
+      assert.equal(activeBounties[1].totalBountyAmount, 225 * T_MUL);
     });
   });
 
@@ -486,19 +560,19 @@ contract('RECPM', function (accounts) {
       account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 6615 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 780 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 770 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 255 * T_MUL);
       account_3_balance = await tokenInstance.balanceOf(accounts[3]);
       assert.equal(account_3_balance.toNumber(), 135 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 0);
+      assert.equal(token_contract_balance.toNumber(), 225 * T_MUL);
 
       // check lock ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
-      assert.equal(account_1_locked_balance.toNumber(), 0);
+      assert.equal(account_1_locked_balance.toNumber(), 10 * T_MUL);
       let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
-      assert.equal(account_2_locked_balance.toNumber(), 0);
+      assert.equal(account_2_locked_balance.toNumber(), 215 * T_MUL);
 
       // check claim marked successful
       let bountyClaimData = await tokenInstance.getBountyClaimData(project_1, 1);
@@ -508,11 +582,115 @@ contract('RECPM', function (accounts) {
       let bountyData = await tokenInstance.getBountyData(project_1, 1);
       assert.equal(bountyData[4], true);
       assert.equal(bountyData[6], false);
+      assert.equal(bountyData[7], false);
+    });
+  });
 
+  describe("refundMyBountyShare", function () {
+    let bountyId = 2;
+
+    it("not allowed if bounty already claimed", async function () {
+      await expectRequireFailure(() => tokenInstance.refundMyBountyShare(project_1, 1, { from: accounts[2] }));
     });
 
+    it("ok", async function () {
+      let bountyData = await tokenInstance.getBountyData(project_1, bountyId);
+
+      let deadlineBlockNumber = bountyData[3].toNumber();
+      let currentBlockNumber = await proxiedWeb3.eth.getBlockNumber();
+
+      // check that it fails until deadline passes
+      await expectRequireFailure(() => tokenInstance.refundMyBountyShare(project_1, bountyId, { from: accounts[1] }));
+
+      while (currentBlockNumber < deadlineBlockNumber) {
+        // mine to advance block number
+        web3.currentProvider.send({ jsonrpc: "2.0", method: "evm_mine", params: [], id: 0 });
+
+        // sleep to avoid testrpc crash
+        await sleep(50);
+
+        // update current blocknumber
+        currentBlockNumber = await proxiedWeb3.eth.getBlockNumber();
+      }
+
+      // not allowed if not bounty participant
+      await expectRequireFailure(() => tokenInstance.refundMyBountyShare(project_1, bountyId, { from: accounts[3] }));
+
+      // Account 2 claims refund
+      await tokenInstance.refundMyBountyShare(project_1, bountyId, { from: accounts[2] });
+
+      // check transfer ok
+      account_0_balance = await tokenInstance.balanceOf(accounts[0]);
+      assert.equal(account_0_balance.toNumber(), 6615 * T_MUL);
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 770 * T_MUL);
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      account_3_balance = await tokenInstance.balanceOf(accounts[3]);
+      assert.equal(account_3_balance.toNumber(), 135 * T_MUL);
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 10 * T_MUL);
+
+      // check lock ok
+      let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
+      assert.equal(account_1_locked_balance.toNumber(), 10 * T_MUL);
+      let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
+      assert.equal(account_2_locked_balance.toNumber(), 0);
+
+      // check bounty additions refund state updated
+      let bountyAddition_1_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 0);
+      assert.equal(bountyAddition_1_Data[1], accounts[1]);
+      assert.equal(bountyAddition_1_Data[3], false);
+
+      let bountyAddition_2_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 1);
+      assert.equal(bountyAddition_2_Data[1], accounts[2]);
+      assert.equal(bountyAddition_2_Data[3], true);
+
+      // check bounty marked refunded and is inactive
+      bountyData = await tokenInstance.getBountyData(project_1, bountyId);
+      assert.equal(bountyData[4], false);
+      assert.equal(bountyData[6], false);
+      assert.equal(bountyData[7], true);
+
+
+      // Account 1 claims refund
+      await tokenInstance.refundMyBountyShare(project_1, bountyId, { from: accounts[1] });
+
+      // check transfer ok
+      account_0_balance = await tokenInstance.balanceOf(accounts[0]);
+      assert.equal(account_0_balance.toNumber(), 6615 * T_MUL);
+      account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 780 * T_MUL);
+      account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      account_3_balance = await tokenInstance.balanceOf(accounts[3]);
+      assert.equal(account_3_balance.toNumber(), 135 * T_MUL);
+      token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 0);
+
+      // check lock ok
+      account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
+      assert.equal(account_1_locked_balance.toNumber(), 0);
+      account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
+      assert.equal(account_2_locked_balance.toNumber(), 0);
+
+      // check bounty additions refund state updated
+      bountyAddition_1_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 0);
+      assert.equal(bountyAddition_1_Data[1], accounts[1]);
+      assert.equal(bountyAddition_1_Data[3], true);
+
+      bountyAddition_2_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 1);
+      assert.equal(bountyAddition_2_Data[1], accounts[2]);
+      assert.equal(bountyAddition_2_Data[3], true);
+
+      // check bounty marked refunded and is inactive
+      bountyData = await tokenInstance.getBountyData(project_1, bountyId);
+      assert.equal(bountyData[4], false);
+      assert.equal(bountyData[6], false);
+      assert.equal(bountyData[7], true);
+    });
 
   });
 
-
 });
+

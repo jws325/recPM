@@ -67,12 +67,14 @@ contract RECPM is PausableToken {
     uint bountyAmount;
     uint deadlineBlockNumber;
     bool successfullyClaimed;
+    bool refunded;
   }
 
   struct BountyAddition {
     uint bountyId;
     address adderAddress;
     uint addedBountyAmount;
+    bool refunded;
   }
 
   struct BountyClaim {
@@ -366,7 +368,7 @@ contract RECPM is PausableToken {
     transferAndLockForBounty(_amount);
 
     uint bountyId = getNextBountyId(_projectAddress);
-    bountyMap[_projectAddress].push(Bounty(bountyId, msg.sender, _amount, _deadlineBlockNumber, false));
+    bountyMap[_projectAddress].push(Bounty(bountyId, msg.sender, _amount, _deadlineBlockNumber, false, false));
 
     NewBounty(_projectAddress, bountyId);
   }
@@ -401,7 +403,7 @@ contract RECPM is PausableToken {
     // transfer and lock the tokens
     transferAndLockForBounty(_amount);
 
-    bountyAdditionMap[_projectAddress][_bountyId - 1].push(BountyAddition(_bountyId, msg.sender, _amount));
+    bountyAdditionMap[_projectAddress][_bountyId - 1].push(BountyAddition(_bountyId, msg.sender, _amount, false));
 
     NewBountyAddition(_projectAddress, _bountyId);
   }
@@ -443,8 +445,9 @@ contract RECPM is PausableToken {
     // check sender is creator
     require(bounty.bountyCreator == msg.sender);
 
-    // transfer main bounty tokens
+    // unlock main bounty tokens
     bountyLockedBalances[bounty.bountyCreator] = bountyLockedBalances[bounty.bountyCreator].sub(bounty.bountyAmount);
+    // transfer main bounty tokens
     balances[this] = balances[this].sub(bounty.bountyAmount);
     balances[bountyClaim.claimerAddress] = balances[bountyClaim.claimerAddress].add(bounty.bountyAmount.mul(9).div(10));
     balances[owner] = balances[owner].add(bounty.bountyAmount.mul(1).div(10));
@@ -456,7 +459,9 @@ contract RECPM is PausableToken {
     for (uint i = 0; i < bountyAdditionMap[_projectAddress][bountyClaim.bountyId - 1].length; i++) {
       BountyAddition memory bountyAddition = bountyAdditionMap[_projectAddress][bountyClaim.bountyId - 1][i];
 
+      // unlock
       bountyLockedBalances[bountyAddition.adderAddress] = bountyLockedBalances[bountyAddition.adderAddress].sub(bountyAddition.addedBountyAmount);
+      // transfer
       balances[this] = balances[this].sub(bountyAddition.addedBountyAmount);
       balances[bountyClaim.claimerAddress] = balances[bountyClaim.claimerAddress].add(bountyAddition.addedBountyAmount.mul(9).div(10));
       balances[owner] = balances[owner].add(bountyAddition.addedBountyAmount.mul(1).div(10));
@@ -477,29 +482,68 @@ contract RECPM is PausableToken {
     BountyClaimAccepted(_projectAddress, bountyClaim.bountyId, bountyClaim.bountyClaimId);
   }
 
-  function refundBounty(address _projectAddress, uint _bountyId) public {
+  /**
+   * @dev Refund share of Bounty to the sender
+   * @param _projectAddress Project Address
+   * @param _bountyId Bounty Id
+   */
+  function refundMyBountyShare(address _projectAddress, uint _bountyId) public {
     require(_projectAddress != address(0));
-    Bounty storage bounty = bountyMap[_projectAddress][_bountyId];
 
-    require(bounty.bountyCreator == msg.sender);
-    require(bounty.successfullyClaimed == false);
-    require(bounty.deadlineBlockNumber > block.number);
+    Bounty storage bounty = bountyMap[_projectAddress][_bountyId - 1];
 
-    uint amount = bounty.bountyAmount;
-    bounty.bountyAmount = 0;
+    // check bounty not claimed
+    require(!bounty.successfullyClaimed);
+    // check bounty expired
+    require(bounty.deadlineBlockNumber <= block.number);
 
-    //balances[bounty.bountyCreator] = balances[bounty.bountyCreator].add(amount);
+    uint amountRefunded = 0;
 
-    //Refund all additional bounties too
-    for (uint i = 0; i < bountyAdditionMap[_projectAddress][_bountyId - 1].length; i++) {
-      amount += bountyAdditionMap[_projectAddress][_bountyId - 1][i].addedBountyAmount;
-      bountyAdditionMap[_projectAddress][_bountyId - 1][i].addedBountyAmount = 0;
-      //Review
+    // refund bounty if sender is creator and share wasn't already refunded
+    if (bounty.bountyCreator == msg.sender && !bounty.refunded) {
+      // unlock main bounty tokens
+      bountyLockedBalances[msg.sender] = bountyLockedBalances[msg.sender].sub(bounty.bountyAmount);
+      // transfer main bounty tokens
+      balances[this] = balances[this].sub(bounty.bountyAmount);
+      balances[msg.sender] = balances[msg.sender].add(bounty.bountyAmount);
+
+      // mark as refunded
+      bounty.refunded = true;
+
+      // add to total refunded
+      amountRefunded = amountRefunded.add(bounty.bountyAmount);
     }
+
+    // check bounty additions
+    for (uint i = 0; i < bountyAdditionMap[_projectAddress][_bountyId - 1].length; i++) {
+      BountyAddition storage bountyAddition = bountyAdditionMap[_projectAddress][_bountyId - 1][i];
+
+      // refund bounty addition if sender is creator
+      if (bountyAddition.adderAddress == msg.sender && !bountyAddition.refunded) {
+        // unlock
+        bountyLockedBalances[msg.sender] = bountyLockedBalances[msg.sender].sub(bountyAddition.addedBountyAmount);
+        // transfer
+        balances[this] = balances[this].sub(bountyAddition.addedBountyAmount);
+        balances[msg.sender] = balances[msg.sender].add(bountyAddition.addedBountyAmount);
+
+        // mark as refunded
+        bountyAddition.refunded = true;
+
+        // add to total refunded
+        amountRefunded = amountRefunded.add(bountyAddition.addedBountyAmount);
+      }
+    }
+
+    // fail if nothing to refund
+    require(amountRefunded > 0);
+
+    // log event
+    Transfer(this, msg.sender, amountRefunded);
   }
 
   /**
    * @dev Get Next Bounty Id
+   * @param _projectAddress Project Address
    */
   function getNextBountyId(address _projectAddress) public constant returns (uint) {
     return getBountiesLength(_projectAddress).add(1);
@@ -507,6 +551,7 @@ contract RECPM is PausableToken {
 
   /**
    * @dev Get Next Bounty Claim Id
+   * @param _projectAddress Project Address
    */
   function getNextBountyClaimId(address _projectAddress) public constant returns (uint) {
     return getBountyClaimsLength(_projectAddress).add(1);
@@ -514,44 +559,53 @@ contract RECPM is PausableToken {
 
   /**
    * @dev Get Bounty Data
+   * @param _projectAddress Project Address
+   * @param _bountyId Bounty ID
    */
   function getBountyData(address _projectAddress, uint _bountyId) public constant
-  returns (uint, address, uint, uint, bool, uint, bool) {
+  returns (uint, address, uint, uint, bool, uint, bool, bool) {
     Bounty memory bounty = bountyMap[_projectAddress][_bountyId - 1];
 
-    uint currentBountyAmount = getCurrentBountyAmount(_projectAddress, _bountyId);
+    uint totalBountyAmount = getTotalBountyAmount(_projectAddress, _bountyId);
 
     return (bounty.bountyId, bounty.bountyCreator, bounty.bountyAmount, bounty.deadlineBlockNumber, bounty.successfullyClaimed,
-    currentBountyAmount, !bounty.successfullyClaimed && bounty.deadlineBlockNumber > block.number);
+    totalBountyAmount, !bounty.successfullyClaimed && bounty.deadlineBlockNumber > block.number, bounty.refunded);
   }
 
   /**
-   * @dev Get Current bounty amount
+   * @dev Get Total bounty amount
+   * @param _projectAddress Project Address
+   * @param _bountyId Bounty ID
    */
-  function getCurrentBountyAmount(address _projectAddress, uint _bountyId) public constant
+  function getTotalBountyAmount(address _projectAddress, uint _bountyId) public constant
   returns (uint) {
-    uint currentBountyAmount = bountyMap[_projectAddress][_bountyId - 1].bountyAmount;
+    uint totalBountyAmount = bountyMap[_projectAddress][_bountyId - 1].bountyAmount;
 
     for (uint i = 0; i < bountyAdditionMap[_projectAddress][_bountyId - 1].length; i++) {
-      currentBountyAmount = currentBountyAmount.add(bountyAdditionMap[_projectAddress][_bountyId - 1][i].addedBountyAmount);
+      totalBountyAmount = totalBountyAmount.add(bountyAdditionMap[_projectAddress][_bountyId - 1][i].addedBountyAmount);
     }
 
-    return (currentBountyAmount);
+    return (totalBountyAmount);
   }
 
   /**
    * @dev Get Bounty Addition Data
+   * @param _projectAddress Project Address
+   * @param _bountyId Bounty ID
+   * @param _index Bounty Addition index
    */
   function getBountyAdditionData(address _projectAddress, uint _bountyId, uint _index) public constant
-  returns (uint, address, uint){
+  returns (uint, address, uint, bool){
     BountyAddition memory bountyAddition = bountyAdditionMap[_projectAddress][_bountyId - 1][_index];
 
-    return (bountyAddition.bountyId, bountyAddition.adderAddress, bountyAddition.addedBountyAmount);
+    return (bountyAddition.bountyId, bountyAddition.adderAddress, bountyAddition.addedBountyAmount, bountyAddition.refunded);
   }
 
   /**
-    * @dev Get Bounty Clain Data
-    */
+   * @dev Get Bounty Claim Data
+   * @param _projectAddress Project Address
+   * @param _bountyClaimId Bounty claim Id
+   */
   function getBountyClaimData(address _projectAddress, uint _bountyClaimId) public constant
   returns (uint, uint, address, bool){
     BountyClaim memory bountyClaim = bountyClaimMap[_projectAddress][_bountyClaimId - 1];
@@ -561,6 +615,7 @@ contract RECPM is PausableToken {
 
   /**
    * @dev Get Number of Bounties for a project
+   * @param _projectAddress Project Address
    */
   function getBountiesLength(address _projectAddress) public constant returns (uint) {
     return bountyMap[_projectAddress].length;
@@ -568,6 +623,8 @@ contract RECPM is PausableToken {
 
   /**
    * @dev Get Number of Bounties for a project
+   * @param _projectAddress Project Address
+   * @param _bountyId Bounty ID
    */
   function getBountyAdditionsLength(address _projectAddress, uint _bountyId) public constant returns (uint) {
     return bountyAdditionMap[_projectAddress][_bountyId - 1].length;
@@ -576,6 +633,7 @@ contract RECPM is PausableToken {
 
   /**
    * @dev Get Number of Bounties for a project
+   * @param _projectAddress Project Address
    */
   function getBountyClaimsLength(address _projectAddress) public constant returns (uint) {
     return bountyClaimMap[_projectAddress].length;
