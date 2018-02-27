@@ -141,6 +141,35 @@ contract('RECPM', function (accounts) {
     });
   });
 
+  describe('stake', function () {
+    it("ok", async function () {
+      await tokenInstance.stakeTokens(200 * T_MUL, { from: accounts[0] });
+      await tokenInstance.stakeTokens(500 * T_MUL, { from: accounts[1] });
+      await tokenInstance.stakeTokens(300 * T_MUL, { from: accounts[2] });
+
+      let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
+      assert.equal(account_0_balance.toNumber(), 8400 * T_MUL);
+      let account_0_staked_balance = await tokenInstance.stakedBalanceOf(accounts[0]);
+      assert.equal(account_0_staked_balance.toNumber(), 200 * T_MUL);
+
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 400 * T_MUL);
+      let account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 500 * T_MUL);
+
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 200 * T_MUL);
+      let account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 300 * T_MUL);
+
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 1000 * T_MUL);
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 1000 * T_MUL);
+    });
+  });
+
   describe("distributeVotes with pagination and pausing", function () {
     let amountToDistribute = 1000;
 
@@ -157,17 +186,20 @@ contract('RECPM', function (accounts) {
       let votesDistributionPage = await tokenInstance.votesDistributionPage();
       assert.equal(votesDistributionPage.toNumber(), 1);
 
+
+      let votedToUse_token_contract = await tokenInstance.votesToUse(RECPM.address);
+      assert.equal(votedToUse_token_contract.toNumber(), 0);
       let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
-      assert.equal(votedToUse_0.toNumber(), 860);
+      assert.equal(votedToUse_0.toNumber(), 200);
       let votedToUse_1 = await tokenInstance.votesToUse(accounts[1]);
-      assert.equal(votedToUse_1.toNumber(), 90);
+      assert.equal(votedToUse_1.toNumber(), 500);
       // not distributed yet
       let votedToUse_2 = await tokenInstance.votesToUse(accounts[2]);
       assert.equal(votedToUse_2.toNumber(), 0);
     });
 
     it("transfers fail during distribution", async function () {
-      await expectRequireFailure(() => tokenInstance.transfer(accounts[1], 500 * T_MUL, { from: accounts[0] }));
+      await expectRequireFailure(() => tokenInstance.transfer(accounts[1], 100 * T_MUL, { from: accounts[0] }));
     });
 
     it("increases votesToUse, second call, page 1", async function () {
@@ -182,17 +214,47 @@ contract('RECPM', function (accounts) {
       assert.equal(votesDistributionPage.toNumber(), 0);
 
       let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
-      assert.equal(votedToUse_0.toNumber(), 860);
+      assert.equal(votedToUse_0.toNumber(), 200);
       let votedToUse_1 = await tokenInstance.votesToUse(accounts[1]);
-      assert.equal(votedToUse_1.toNumber(), 90);
+      assert.equal(votedToUse_1.toNumber(), 500);
       let votedToUse_2 = await tokenInstance.votesToUse(accounts[2]);
-      assert.equal(votedToUse_2.toNumber(), 50);
+      assert.equal(votedToUse_2.toNumber(), 300);
     });
 
     it("increases votesToUse, third call fails (distribution already completed)", async function () {
       await expectRequireFailure(() => tokenInstance.distributeVotes(amountToDistribute, { from: accounts[0] }));
     });
 
+  });
+
+
+  describe('unstake', function () {
+    it("ok", async function () {
+      await tokenInstance.unstakeTokens(200 * T_MUL, { from: accounts[0] });
+      await tokenInstance.unstakeTokens(100 * T_MUL, { from: accounts[1] });
+      await tokenInstance.unstakeTokens(200 * T_MUL, { from: accounts[2] });
+
+      let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
+      assert.equal(account_0_balance.toNumber(), 8600 * T_MUL);
+      let account_0_staked_balance = await tokenInstance.stakedBalanceOf(accounts[0]);
+      assert.equal(account_0_staked_balance.toNumber(), 0 * T_MUL);
+
+      let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
+      assert.equal(account_1_balance.toNumber(), 500 * T_MUL);
+      let account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 400 * T_MUL);
+
+      let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
+      assert.equal(account_2_balance.toNumber(), 400 * T_MUL);
+      let account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 100 * T_MUL);
+
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 500 * T_MUL);
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 500 * T_MUL);
+    });
   });
 
   describe("vote", function () {
@@ -206,11 +268,11 @@ contract('RECPM', function (accounts) {
       await tokenInstance.vote(project_3, { from: accounts[2] });
 
       let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
-      assert.equal(votedToUse_0.toNumber(), 858);
+      assert.equal(votedToUse_0.toNumber(), 198);
       let votedToUse_1 = await tokenInstance.votesToUse(accounts[1]);
-      assert.equal(votedToUse_1.toNumber(), 89);
+      assert.equal(votedToUse_1.toNumber(), 499);
       let votedToUse_2 = await tokenInstance.votesToUse(accounts[2]);
-      assert.equal(votedToUse_2.toNumber(), 48);
+      assert.equal(votedToUse_2.toNumber(), 298);
 
       let upvotesReceivedThisWeek_1 = await tokenInstance.upvotesReceivedThisWeek(project_1);
       assert.equal(upvotesReceivedThisWeek_1.toNumber(), 3);
@@ -253,9 +315,9 @@ contract('RECPM', function (accounts) {
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 8800 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 900 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 500 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 400 * T_MUL);
 
       // check votes reset (for page 0)
 
@@ -300,9 +362,9 @@ contract('RECPM', function (accounts) {
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 8600 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 900 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 500 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 400 * T_MUL);
 
       // check votes reset
 
@@ -332,20 +394,33 @@ contract('RECPM', function (accounts) {
       await tokenInstance.burn(2000 * T_MUL, { from: accounts[0] });
 
       let totalSupply = await tokenInstance.totalSupply();
-      assert.equal(totalSupply, 9000 * T_MUL);
+      assert.equal(totalSupply.toNumber(), 9000 * T_MUL);
 
+      let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
+      assert.equal(token_contract_balance.toNumber(), 500 * T_MUL);
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 6600 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 900 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 500 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 500 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 400 * T_MUL);
       let project_1_balance = await tokenInstance.balanceOf(project_1);
       assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
       let project_2_balance = await tokenInstance.balanceOf(project_2);
       assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
       let project_3_balance = await tokenInstance.balanceOf(project_3);
       assert.equal(project_3_balance.toNumber(), 200 * T_MUL);
+
+      // check totals consistent
+      assert.equal(
+        token_contract_balance.toNumber() +
+        account_0_balance.toNumber() +
+        account_1_balance.toNumber() +
+        account_2_balance.toNumber() +
+        project_1_balance.toNumber() +
+        project_2_balance.toNumber() +
+        project_3_balance.toNumber()
+        , totalSupply.toNumber());
     });
   });
 
@@ -370,13 +445,18 @@ contract('RECPM', function (accounts) {
 
       // check transfer ok
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 800 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 400 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 100 * T_MUL);
+      assert.equal(token_contract_balance.toNumber(), 600 * T_MUL);
 
-      // check lock ok
+      // check lock and stake ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 100 * T_MUL);
+      let account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 500 * T_MUL);
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 600 * T_MUL);
     });
 
     it("bounty 2", async function () {
@@ -399,13 +479,18 @@ contract('RECPM', function (accounts) {
 
       // check transfer ok
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 300 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 200 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 300 * T_MUL);
+      assert.equal(token_contract_balance.toNumber(), 800 * T_MUL);
 
-      // check lock ok
+      // check lock and stake ok
       let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
       assert.equal(account_2_locked_balance.toNumber(), 200 * T_MUL);
+      let account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 300 * T_MUL);
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 800 * T_MUL);
     });
   });
 
@@ -434,17 +519,26 @@ contract('RECPM', function (accounts) {
 
       // check transfer ok
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 780 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 380 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 270 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 170 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 350 * T_MUL);
+      assert.equal(token_contract_balance.toNumber(), 850 * T_MUL);
 
-      // check lock ok
+      // check lock and stake ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 120 * T_MUL);
+      let account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 520 * T_MUL);
+
       let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
       assert.equal(account_2_locked_balance.toNumber(), 230 * T_MUL);
+      let account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 330 * T_MUL);
+
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 850 * T_MUL);
     });
 
     it("bounty 2 ", async function () {
@@ -470,17 +564,26 @@ contract('RECPM', function (accounts) {
 
       // check transfer ok
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 770 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 370 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 255 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 155 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 375 * T_MUL);
+      assert.equal(token_contract_balance.toNumber(), 875 * T_MUL);
 
-      // check lock ok
+      // check lock and stake ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 130 * T_MUL);
+      let account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 530 * T_MUL);
+
       let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
       assert.equal(account_2_locked_balance.toNumber(), 245 * T_MUL);
+      let account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 345 * T_MUL);
+
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 875 * T_MUL);
     });
 
   });
@@ -560,19 +663,27 @@ contract('RECPM', function (accounts) {
       account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 6615 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 770 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 370 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 255 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 155 * T_MUL);
       account_3_balance = await tokenInstance.balanceOf(accounts[3]);
       assert.equal(account_3_balance.toNumber(), 135 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 225 * T_MUL);
+      assert.equal(token_contract_balance.toNumber(), 725 * T_MUL);
 
-      // check lock ok
+      // check lock and stake ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 10 * T_MUL);
+      let account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 410 * T_MUL);
+
       let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
       assert.equal(account_2_locked_balance.toNumber(), 215 * T_MUL);
+      let account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 315 * T_MUL);
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 725 * T_MUL);
 
       // check claim marked successful
       let bountyClaimData = await tokenInstance.getBountyClaimData(project_1, 1);
@@ -623,19 +734,27 @@ contract('RECPM', function (accounts) {
       account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 6615 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 770 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 370 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 370 * T_MUL);
       account_3_balance = await tokenInstance.balanceOf(accounts[3]);
       assert.equal(account_3_balance.toNumber(), 135 * T_MUL);
       let token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 10 * T_MUL);
+      assert.equal(token_contract_balance.toNumber(), 510 * T_MUL);
 
-      // check lock ok
+      // check lock and stake ok
       let account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
       assert.equal(account_1_locked_balance.toNumber(), 10 * T_MUL);
+      let account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 410 * T_MUL);
+
       let account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
-      assert.equal(account_2_locked_balance.toNumber(), 0);
+      assert.equal(account_2_locked_balance.toNumber(), 0 * T_MUL);
+      let account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 100 * T_MUL);
+
+      let totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 510 * T_MUL);
 
       // check bounty additions refund state updated
       let bountyAddition_1_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 0);
@@ -662,19 +781,48 @@ contract('RECPM', function (accounts) {
       account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 6615 * T_MUL);
       account_1_balance = await tokenInstance.balanceOf(accounts[1]);
-      assert.equal(account_1_balance.toNumber(), 780 * T_MUL);
+      assert.equal(account_1_balance.toNumber(), 380 * T_MUL);
       account_2_balance = await tokenInstance.balanceOf(accounts[2]);
-      assert.equal(account_2_balance.toNumber(), 470 * T_MUL);
+      assert.equal(account_2_balance.toNumber(), 370 * T_MUL);
       account_3_balance = await tokenInstance.balanceOf(accounts[3]);
       assert.equal(account_3_balance.toNumber(), 135 * T_MUL);
       token_contract_balance = await tokenInstance.balanceOf(RECPM.address);
-      assert.equal(token_contract_balance.toNumber(), 0);
+      assert.equal(token_contract_balance.toNumber(), 500 * T_MUL);
 
-      // check lock ok
+      // check lock and stake ok
       account_1_locked_balance = await tokenInstance.bountyLockedBalances(accounts[1]);
-      assert.equal(account_1_locked_balance.toNumber(), 0);
+      assert.equal(account_1_locked_balance.toNumber(), 0 * T_MUL);
+      account_1_staked_balance = await tokenInstance.stakedBalanceOf(accounts[1]);
+      assert.equal(account_1_staked_balance.toNumber(), 400 * T_MUL);
+
       account_2_locked_balance = await tokenInstance.bountyLockedBalances(accounts[2]);
-      assert.equal(account_2_locked_balance.toNumber(), 0);
+      assert.equal(account_2_locked_balance.toNumber(), 0 * T_MUL);
+      account_2_staked_balance = await tokenInstance.stakedBalanceOf(accounts[2]);
+      assert.equal(account_2_staked_balance.toNumber(), 100 * T_MUL);
+
+      totalStaked = await tokenInstance.totalStaked();
+      assert.equal(totalStaked.toNumber(), 500 * T_MUL);
+
+      // check totals consistent
+      let project_1_balance = await tokenInstance.balanceOf(project_1);
+      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
+      let project_2_balance = await tokenInstance.balanceOf(project_2);
+      assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
+      let project_3_balance = await tokenInstance.balanceOf(project_3);
+      assert.equal(project_3_balance.toNumber(), 200 * T_MUL);
+      let totalSupply = await tokenInstance.totalSupply();
+      assert.equal(totalSupply.toNumber(), 9000 * T_MUL);
+
+      assert.equal(
+        token_contract_balance.toNumber() +
+        account_0_balance.toNumber() +
+        account_1_balance.toNumber() +
+        account_2_balance.toNumber() +
+        account_3_balance.toNumber() +
+        project_1_balance.toNumber() +
+        project_2_balance.toNumber() +
+        project_3_balance.toNumber()
+        , totalSupply.toNumber());
 
       // check bounty additions refund state updated
       bountyAddition_1_Data = await tokenInstance.getBountyAdditionData(project_1, bountyId, 0);

@@ -9,6 +9,8 @@ contract RECPM is PausableToken {
   /*
    * Events
    */
+  event TokensStaked(address _userAddress, uint _amount);
+  event TokensUnstaked(address _userAddress, uint _amount);
   event VotesDistributed(uint _amount);
   event TokensDistributed(uint _amount);
   event PauseVoting();
@@ -35,6 +37,10 @@ contract RECPM is PausableToken {
   mapping(address => bool) public projectAddressInitialized;
   address[] public projectAddresses;
 
+  // staked balance per address
+  mapping(address => uint256) public stakedBalances;
+  // staked Tokens Staked
+  uint public totalStaked;
 
   /** START Voting Variables **/
 
@@ -55,7 +61,7 @@ contract RECPM is PausableToken {
   bool public votingPaused = false;
 
 
-  /** END Bounty Variables **/
+  /** END Voting Variables **/
 
 
   /** START Bounty Variables **/
@@ -147,6 +153,68 @@ contract RECPM is PausableToken {
   }
 
   /**
+   * @dev Stake Tokens
+   * @param _amount Amount
+   */
+  function stakeTokens(uint _amount) public {
+    require(_amount > 0);
+
+    // transfer
+    transfer(this, _amount);
+
+    // add to staked balance
+    increaseStakedBalance(msg.sender, _amount);
+
+    // Log event
+    TokensStaked(msg.sender, _amount);
+  }
+
+  /**
+   * @dev Unstake Tokens
+   * @param _amount Amount
+   */
+  function unstakeTokens(uint _amount) public {
+    // check that staked balance is sufficient
+    require(stakedBalances[msg.sender].sub(bountyLockedBalances[msg.sender]) >= _amount);
+
+    // remove from staked balance
+    decreaseStakedBalance(msg.sender, _amount);
+
+    // transfer tokens from the contract to the user
+    balances[msg.sender] = balances[msg.sender].add(_amount);
+    balances[this] = balances[this].sub(_amount);
+    // Log transfer event
+    Transfer(this, msg.sender, _amount);
+
+    // Log unstake event
+    TokensUnstaked(msg.sender, _amount);
+  }
+
+  /**
+   * @dev Increase Staked Balance
+   * @param _userAddress User Address
+   * @param _amount Amount
+   */
+  function increaseStakedBalance(address _userAddress, uint _amount) internal {
+    // add the tokens to the user's staked balance
+    stakedBalances[_userAddress] = stakedBalances[_userAddress].add(_amount);
+    // increase total
+    totalStaked = totalStaked.add(_amount);
+  }
+
+  /**
+  * @dev Decrease Staked Balance
+  * @param _userAddress User Address
+  * @param _amount Amount
+  */
+  function decreaseStakedBalance(address _userAddress, uint _amount) internal {
+    // remove the tokens from the user's staked balance
+    stakedBalances[_userAddress] = stakedBalances[_userAddress].sub(_amount);
+    // decrease total
+    totalStaked = totalStaked.sub(_amount);
+  }
+
+  /**
    * @dev Distribute Votes
    * @param _votesToDistribute Amount of votes to distribute
    */
@@ -166,7 +234,7 @@ contract RECPM is PausableToken {
     for (uint i = startingIndex; i < endingIndex; i++) {
       if (i < holderAddresses.length) {
         address holderAddress = holderAddresses[i];
-        votesToUse[holderAddress] = votesToUse[holderAddress].add(balanceOf(holderAddress).mul(_votesToDistribute).div(totalSupply));
+        votesToUse[holderAddress] = votesToUse[holderAddress].add(stakedBalanceOf(holderAddress).mul(_votesToDistribute).div(totalStaked));
       }
       else {
         //we've updated all of the holder addresses
@@ -324,7 +392,8 @@ contract RECPM is PausableToken {
    * @param _address Token holder Address to be added
    */
   function tryAddHolderAddress(address _address) internal {
-    if (!holderAddressInitialized[_address]) {
+    // do not add already initialized addresses and the contract's address to the list
+    if (!holderAddressInitialized[_address] && _address != address(this)) {
       holderAddresses.push(_address);
       holderAddressInitialized[_address] = true;
     }
@@ -364,8 +433,8 @@ contract RECPM is PausableToken {
     // check sender's balance is sufficient
     require(balanceOf(msg.sender) >= _amount);
 
-    // transfer and lock the tokens
-    transferAndLockForBounty(_amount);
+    // lock and stake the tokens
+    lockAndStakeForBounty(_amount);
 
     uint bountyId = getNextBountyId(_projectAddress);
     bountyMap[_projectAddress].push(Bounty(bountyId, msg.sender, _amount, _deadlineBlockNumber, false, false));
@@ -374,14 +443,14 @@ contract RECPM is PausableToken {
   }
 
   /**
-   * @dev Transfer tokens and lock them for bounty
+   * @dev Lock tokens tokens and stake them for bounty
    * @param _amount Amount
    */
-  function transferAndLockForBounty(uint _amount) internal {
-    // transfer
-    transfer(this, _amount);
+  function lockAndStakeForBounty(uint _amount) internal {
     // lock
     bountyLockedBalances[msg.sender] = bountyLockedBalances[msg.sender].add(_amount);
+    // stake
+    stakeTokens(_amount);
   }
 
   /**
@@ -400,8 +469,8 @@ contract RECPM is PausableToken {
     // check bounty not expired
     require(bountyMap[_projectAddress][_bountyId - 1].deadlineBlockNumber > block.number);
 
-    // transfer and lock the tokens
-    transferAndLockForBounty(_amount);
+    // lock and stake the tokens
+    lockAndStakeForBounty(_amount);
 
     bountyAdditionMap[_projectAddress][_bountyId - 1].push(BountyAddition(_bountyId, msg.sender, _amount, false));
 
@@ -447,6 +516,10 @@ contract RECPM is PausableToken {
 
     // unlock main bounty tokens
     bountyLockedBalances[bounty.bountyCreator] = bountyLockedBalances[bounty.bountyCreator].sub(bounty.bountyAmount);
+    // remove from staked balance
+    decreaseStakedBalance(bounty.bountyCreator, bounty.bountyAmount);
+    // Log unstake event
+    TokensUnstaked(bounty.bountyCreator, bounty.bountyAmount);
     // transfer main bounty tokens
     balances[this] = balances[this].sub(bounty.bountyAmount);
     balances[bountyClaim.claimerAddress] = balances[bountyClaim.claimerAddress].add(bounty.bountyAmount.mul(9).div(10));
@@ -461,6 +534,10 @@ contract RECPM is PausableToken {
 
       // unlock
       bountyLockedBalances[bountyAddition.adderAddress] = bountyLockedBalances[bountyAddition.adderAddress].sub(bountyAddition.addedBountyAmount);
+      // remove from staked balance
+      decreaseStakedBalance(bountyAddition.adderAddress, bountyAddition.addedBountyAmount);
+      // Log unstake event
+      TokensUnstaked(bountyAddition.adderAddress, bountyAddition.addedBountyAmount);
       // transfer
       balances[this] = balances[this].sub(bountyAddition.addedBountyAmount);
       balances[bountyClaim.claimerAddress] = balances[bountyClaim.claimerAddress].add(bountyAddition.addedBountyAmount.mul(9).div(10));
@@ -503,6 +580,8 @@ contract RECPM is PausableToken {
     if (bounty.bountyCreator == msg.sender && !bounty.refunded) {
       // unlock main bounty tokens
       bountyLockedBalances[msg.sender] = bountyLockedBalances[msg.sender].sub(bounty.bountyAmount);
+      // remove from staked balance
+      decreaseStakedBalance(msg.sender, bounty.bountyAmount);
       // transfer main bounty tokens
       balances[this] = balances[this].sub(bounty.bountyAmount);
       balances[msg.sender] = balances[msg.sender].add(bounty.bountyAmount);
@@ -522,6 +601,8 @@ contract RECPM is PausableToken {
       if (bountyAddition.adderAddress == msg.sender && !bountyAddition.refunded) {
         // unlock
         bountyLockedBalances[msg.sender] = bountyLockedBalances[msg.sender].sub(bountyAddition.addedBountyAmount);
+        // remove from staked balance
+        decreaseStakedBalance(msg.sender, bountyAddition.addedBountyAmount);
         // transfer
         balances[this] = balances[this].sub(bountyAddition.addedBountyAmount);
         balances[msg.sender] = balances[msg.sender].add(bountyAddition.addedBountyAmount);
@@ -537,8 +618,9 @@ contract RECPM is PausableToken {
     // fail if nothing to refund
     require(amountRefunded > 0);
 
-    // log event
+    // log events
     Transfer(this, msg.sender, amountRefunded);
+    TokensUnstaked(msg.sender, amountRefunded);
   }
 
   /**
@@ -638,4 +720,13 @@ contract RECPM is PausableToken {
   function getBountyClaimsLength(address _projectAddress) public constant returns (uint) {
     return bountyClaimMap[_projectAddress].length;
   }
+
+  /**
+   * @dev Gets the staked balance of the specified address.
+   * @param _userAddress The address to query the the balance of.
+   */
+  function stakedBalanceOf(address _userAddress) public constant returns (uint balance) {
+    return stakedBalances[_userAddress];
+  }
+
 }
