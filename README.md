@@ -1,30 +1,14 @@
-# RPM
+# RECPM
 
 ## Notes
 
-The RPM token is an ERC20 compatible token on the Ethereum blockchain.  RPM is a utility token allowing token holders to vote for their favorite projects on the RPM platform. Each project has its own Ethereum address.
-
-Every Monday at 12 PM UTC, votes will be distributed to RPM holders in proportion to the number of RPM tokens they hold, as per the equation:
-
-VwX = (RPMX / RPMT) · VwT
-
-Where VwX is votes distributed to Account X for the week, RPMX is RPM held by Account X, RPMT is the total amount of RPM tokens in existence, and VwT is the total number of votes distributed this week.
-
-These votes do not expire: they can be used to upvote projects at any time.
-
-Every Friday at 12 PM UTC, RPM tokens will be distributed to project maintainers in proportion to the number of upvotes their projects received that week, as per the equation:
-
-RPMwX = (∪wX / ∪wT) · RPMwT
-
-Where RPMwX is RPM awarded to Project X for the week, ∪wX is the number of upvotes that Project X received that week, ∪wT is the total number of upvotes all RPM projects received that week, and RPMwT is the total amount of RPM awarded this week.
-
-These new RPM tokens will be minted by increasing the supply of RPM tokens, in a method similar to increaseSupply here: https://github.com/ethereum/EIPs/pull/621
-
-## Notes
-
-RPM balances are represented to 10^6, this is due to potential rounding issues.
+RECPM balances are represented to 10^6, this is due to potential rounding issues.
 
 ## Instructions
+
+Install packages
+
+```$ npm install```
 
 Start testrpc
 
@@ -32,4 +16,26 @@ Start testrpc
 
 To run tests : 
 
-```$ truffle test```
+```$ npm test```
+
+To deploy contracts : 
+
+```$ npm run migrate```
+
+# Backend scripts
+
+## Distribute Votes
+
+```$ npm run distribute-votes -- [AMOUNT_TO_DISTRIBUTE]``` 
+
+## Distribute Tokens
+
+```$ npm run distribute-tokens -- [AMOUNT_TO_DISTRIBUTE_IN_RECPM]``` 
+
+## Burn RECPM
+
+```$ npm run burn -- [AMOUNT_TO_DISTRIBUTE_IN_RECPM]``` 
+
+## Set Page Size 
+
+```$ npm run set-page-size -- [PAGE_SIZE]``` 

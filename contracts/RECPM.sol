@@ -220,8 +220,10 @@ contract RECPM is PausableToken {
    */
   function distributeVotes(uint _votesToDistribute) external onlyOwner {
     require(_votesToDistribute > 0);
-    // 7 days minimum between distributions
-    require(now >= lastVotesDistributionTimestamp + 7 days);
+    // Check if votes can be distributed now
+    require(canDistributeVotes());
+    // Check some tokens are staked
+    require(totalStaked > 0);
 
     if (votesDistributionPage == 0) {
       // distribution is starting, pause token transfers
@@ -260,20 +262,36 @@ contract RECPM is PausableToken {
   }
 
   /**
+   * @dev Check if votes can be distributed
+   */
+  function canDistributeVotes() constant public returns (bool){
+    return now >= nextVotesDistributionTimeStamp();
+  }
+
+  /**
+   * @dev Get Next Votes distribution timestamp
+   */
+  function nextVotesDistributionTimeStamp() constant public returns (uint){
+    return lastVotesDistributionTimestamp + 7 days;
+  }
+
+  /**
    * @dev Vote
    * @param _projectAddress Project address
+   * @param _votes Number of votes
    */
-  function vote(address _projectAddress) whenVotingNotPaused public {
-    require(votesToUse[msg.sender] > 0);
+  function vote(address _projectAddress, uint _votes) whenVotingNotPaused public {
+    require(_votes > 0);
+    require(votesToUse[msg.sender] >= _votes);
     // check project is in the list
     require(projectAddressInitialized[_projectAddress]);
 
     // decrease votes available
-    votesToUse[msg.sender] = votesToUse[msg.sender].sub(1);
+    votesToUse[msg.sender] = votesToUse[msg.sender].sub(_votes);
 
     // count vote in
-    upvotesReceivedThisWeek[_projectAddress] = upvotesReceivedThisWeek[_projectAddress].add(1);
-    totalUpvotesReceivedThisWeek = totalUpvotesReceivedThisWeek.add(1);
+    upvotesReceivedThisWeek[_projectAddress] = upvotesReceivedThisWeek[_projectAddress].add(_votes);
+    totalUpvotesReceivedThisWeek = totalUpvotesReceivedThisWeek.add(_votes);
   }
 
   /**
@@ -300,8 +318,8 @@ contract RECPM is PausableToken {
   function distributeTokens(uint _newTokens) public onlyOwner {
     require(_newTokens > 0);
     require(totalUpvotesReceivedThisWeek > 0);
-    // 7 days minimum between distributions
-    require(now >= lastTokensDistributionTimestamp + 7 days);
+    // check if tokens can be distributed now
+    require(canDistributeTokens());
 
     if (tokensDistributionPage == 0) {
       // distribution is starting, pause token transfers
@@ -349,6 +367,20 @@ contract RECPM is PausableToken {
 
     // if we get here, we increment page and return, then call the function again in the next block to process the next page
     tokensDistributionPage = tokensDistributionPage.add(1);
+  }
+
+  /**
+   * @dev Check if tokens can be distributed
+   */
+  function canDistributeTokens() constant public returns (bool){
+    return now >= nextTokensDistributionTimeStamp();
+  }
+
+  /**
+   * @dev Get Next Tokens distribution timestamp
+   */
+  function nextTokensDistributionTimeStamp() constant public returns (uint){
+    return lastTokensDistributionTimestamp + 7 days;
   }
 
   /**

@@ -259,30 +259,30 @@ contract('RECPM', function (accounts) {
 
   describe("vote", function () {
     it("ok", async function () {
-      await tokenInstance.vote(project_1, { from: accounts[0] });
-      await tokenInstance.vote(project_1, { from: accounts[1] });
-      await tokenInstance.vote(project_1, { from: accounts[2] });
+      await tokenInstance.vote(project_1, 2, { from: accounts[0] });
+      await tokenInstance.vote(project_1, 3, { from: accounts[1] });
+      await tokenInstance.vote(project_1, 2, { from: accounts[2] });
 
-      await tokenInstance.vote(project_2, { from: accounts[0] });
+      await tokenInstance.vote(project_2, 2, { from: accounts[0] });
 
-      await tokenInstance.vote(project_3, { from: accounts[2] });
+      await tokenInstance.vote(project_3, 1, { from: accounts[2] });
 
       let votedToUse_0 = await tokenInstance.votesToUse(accounts[0]);
-      assert.equal(votedToUse_0.toNumber(), 198);
+      assert.equal(votedToUse_0.toNumber(), 196);
       let votedToUse_1 = await tokenInstance.votesToUse(accounts[1]);
-      assert.equal(votedToUse_1.toNumber(), 499);
+      assert.equal(votedToUse_1.toNumber(), 497);
       let votedToUse_2 = await tokenInstance.votesToUse(accounts[2]);
-      assert.equal(votedToUse_2.toNumber(), 298);
+      assert.equal(votedToUse_2.toNumber(), 297);
 
       let upvotesReceivedThisWeek_1 = await tokenInstance.upvotesReceivedThisWeek(project_1);
-      assert.equal(upvotesReceivedThisWeek_1.toNumber(), 3);
+      assert.equal(upvotesReceivedThisWeek_1.toNumber(), 7);
       let upvotesReceivedThisWeek_2 = await tokenInstance.upvotesReceivedThisWeek(project_2);
-      assert.equal(upvotesReceivedThisWeek_2.toNumber(), 1);
+      assert.equal(upvotesReceivedThisWeek_2.toNumber(), 2);
       let upvotesReceivedThisWeek_3 = await tokenInstance.upvotesReceivedThisWeek(project_3);
       assert.equal(upvotesReceivedThisWeek_3.toNumber(), 1);
 
       let totalUpvotesReceivedThisWeek = await tokenInstance.totalUpvotesReceivedThisWeek();
-      assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 5);
+      assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 10)
     });
   });
 
@@ -304,7 +304,7 @@ contract('RECPM', function (accounts) {
       assert.equal(totalSupply, 11000 * T_MUL);
 
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
+      assert.equal(project_1_balance.toNumber(), 700 * T_MUL);
 
       let project_2_balance = await tokenInstance.balanceOf(project_2);
       assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
@@ -313,7 +313,7 @@ contract('RECPM', function (accounts) {
       assert.equal(project_3_balance.toNumber(), 0);
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
-      assert.equal(account_0_balance.toNumber(), 8800 * T_MUL);
+      assert.equal(account_0_balance.toNumber(), 8700 * T_MUL);
       let account_1_balance = await tokenInstance.balanceOf(accounts[1]);
       assert.equal(account_1_balance.toNumber(), 500 * T_MUL);
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
@@ -329,11 +329,11 @@ contract('RECPM', function (accounts) {
       assert.equal(upvotesReceivedThisWeek_3.toNumber(), 1);
 
       let totalUpvotesReceivedThisWeek = await tokenInstance.totalUpvotesReceivedThisWeek();
-      assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 5);
+      assert.equal(totalUpvotesReceivedThisWeek.toNumber(), 10);
     });
 
     it("votes fail during distribution", async function () {
-      await expectRequireFailure(() => tokenInstance.vote(project_1, { from: accounts[0] }));
+      await expectRequireFailure(() => tokenInstance.vote(project_1, 1, { from: accounts[0] }));
     });
 
     it("second call , page 1", async function () {
@@ -351,13 +351,13 @@ contract('RECPM', function (accounts) {
       assert.equal(totalSupply, 11000 * T_MUL);
 
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
+      assert.equal(project_1_balance.toNumber(), 700 * T_MUL);
 
       let project_2_balance = await tokenInstance.balanceOf(project_2);
       assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
 
       let project_3_balance = await tokenInstance.balanceOf(project_3);
-      assert.equal(project_3_balance.toNumber(), 200 * T_MUL);
+      assert.equal(project_3_balance.toNumber(), 100 * T_MUL);
 
       let account_0_balance = await tokenInstance.balanceOf(accounts[0]);
       assert.equal(account_0_balance.toNumber(), 8600 * T_MUL);
@@ -405,11 +405,11 @@ contract('RECPM', function (accounts) {
       let account_2_balance = await tokenInstance.balanceOf(accounts[2]);
       assert.equal(account_2_balance.toNumber(), 400 * T_MUL);
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
+      assert.equal(project_1_balance.toNumber(), 700 * T_MUL);
       let project_2_balance = await tokenInstance.balanceOf(project_2);
       assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
       let project_3_balance = await tokenInstance.balanceOf(project_3);
-      assert.equal(project_3_balance.toNumber(), 200 * T_MUL);
+      assert.equal(project_3_balance.toNumber(), 100 * T_MUL);
 
       // check totals consistent
       assert.equal(
@@ -805,11 +805,11 @@ contract('RECPM', function (accounts) {
 
       // check totals consistent
       let project_1_balance = await tokenInstance.balanceOf(project_1);
-      assert.equal(project_1_balance.toNumber(), 600 * T_MUL);
+      assert.equal(project_1_balance.toNumber(), 700 * T_MUL);
       let project_2_balance = await tokenInstance.balanceOf(project_2);
       assert.equal(project_2_balance.toNumber(), 200 * T_MUL);
       let project_3_balance = await tokenInstance.balanceOf(project_3);
-      assert.equal(project_3_balance.toNumber(), 200 * T_MUL);
+      assert.equal(project_3_balance.toNumber(), 100 * T_MUL);
       let totalSupply = await tokenInstance.totalSupply();
       assert.equal(totalSupply.toNumber(), 9000 * T_MUL);
 

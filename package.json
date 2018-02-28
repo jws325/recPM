@@ -1,0 +1,33 @@
+{
+  "name": "recpm",
+  "version": "0.1.0",
+  "description": "RECPM",
+  "main": "",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "truffle": "node node_modules/truffle/build/cli.bundled.js",
+    "test": "node node_modules/truffle/build/cli.bundled.js test",
+    "migrate": "node node_modules/truffle/build/cli.bundled.js migrate",
+    "distribute-votes": "node node_modules/truffle/build/cli.bundled.js exec truffle-scripts/distribute-votes.js",
+    "distribute-tokens": "node node_modules/truffle/build/cli.bundled.js exec truffle-scripts/distribute-tokens.js",
+    "burn": "node node_modules/truffle/build/cli.bundled.js exec truffle-scripts/burn.js",
+    "set-page-size": "node node_modules/truffle/build/cli.bundled.js exec truffle-scripts/set-page-size.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jws325/recPM.git"
+  },
+  "author": "",
+  "license": "",
+  "bugs": {
+    "url": "https://github.com/jws325/recPM/issues"
+  },
+  "homepage": "https://github.com/jws325/recPM",
+  "dependencies": {
+    "promisify-es6": "^1.0.3",
+    "truffle": "^4.1.0",
+    "truffle-contract": "^3.0.4"
+  }
+}
