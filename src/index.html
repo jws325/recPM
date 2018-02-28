@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>RECPM</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <style>
+        input {
+            width: 350px;
+        }
+
+        textarea {
+            width: 350px;
+            height: 50px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <h1>RECPM</h1>
+
+    <div>Balance : <span id="balance"></span></div>
+    <div>Staked balance : <span id="staked-balance"></span></div>
+    <div>Bounties Locked Balance : <span id="bounty-locked-balance"></span></div>
+    <div>Votes to use : <span id="votes-to-use"></span></div>
+    <button type="button" id="refresh-balances-button">Refresh</button>
+
+    <form id="add-project-address">
+        <h5>Add Project Address</h5>
+        Address:<br>
+        <input type="text" name="address" id="add-project-address-address"><br>
+        <button type="button" id="add-project-address-button">Add</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+
+    <form id="get-project-addresses">
+        <h5>Get Project Addresses</h5>
+        <button type="button" id="get-project-addresses-button">Get</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+
+    <form id="stake-tokens">
+        <h5>Stake Tokens</h5>
+        Amount:<br>
+        <input type="text" name="address" id="stake-tokens-amount"><br>
+        <button type="button" id="stake-tokens-button">Stake</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+
+    <form id="unstake-tokens">
+        <h5>Unstake Tokens</h5>
+        Amount:<br>
+        <input type="text" name="address" id="unstake-tokens-amount"><br>
+        <button type="button" id="unstake-tokens-button">Unstake</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+
+</div>
+</body>
+</html>

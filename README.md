@@ -22,7 +22,16 @@ To deploy contracts :
 
 ```$ npm run migrate```
 
+# Frontend
+To Start : 
+
+```$ npm run dev```
+
 # Backend scripts
+
+## Transfer Tokens
+
+```$ npm run transfer -- [DESTINATION_ADDRESS] [AMOUNT_TO_TRANSFER_IN_RECPM]``` 
 
 ## Distribute Votes
 

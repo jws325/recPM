@@ -153,6 +153,13 @@ contract RECPM is PausableToken {
   }
 
   /**
+   * @dev Get Project Addresses
+   */
+  function getProjectAddresses() public constant returns (address[]) {
+    return projectAddresses;
+  }
+
+  /**
    * @dev Stake Tokens
    * @param _amount Amount
    */
