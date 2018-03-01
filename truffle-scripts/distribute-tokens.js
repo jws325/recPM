@@ -32,7 +32,7 @@ async function run() {
   // Distribute until timestamp changes
   while (oldTokendDistributionTimeStamp === lastTokensDistributionTimestamp.toNumber()) {
     let tokensDistributionPage = await tokenInstance.tokensDistributionPage();
-    console.log("Distributing Tokens, page:", tokensDistributionPage);
+    console.log("Distributing Tokens, page:", tokensDistributionPage.toNumber());
 
     await tokenInstance.distributeTokens(amountToDistribute, { from: accounts[0], gas: 500000 });
 
