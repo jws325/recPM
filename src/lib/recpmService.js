@@ -241,6 +241,25 @@ async function getActiveBounties(web3, projectAddress) {
   return activeBounties;
 }
 
+async function getExpiredBounties(web3, projectAddress) {
+  const tokenInstance = await contractService.getDeployedInstance(web3, "RECPM");
+
+  let expiredBounties = [];
+
+  let bountiesLength = await tokenInstance.getBountiesLength(projectAddress);
+
+  for (let i = 0; i < bountiesLength; i++) {
+    let bounty = await getBounty(web3, projectAddress, i + 1);
+
+    let currentBlockNumber = await promisify(web3.eth.getBlockNumber)();
+    if (currentBlockNumber >= bounty.deadlineBlockNumber) {
+      expiredBounties.push(bounty);
+    }
+  }
+
+  return expiredBounties;
+}
+
 
 async function addToBounty(web3, projectAddress, bountyId, amount) {
   const tokenInstance = await contractService.getDeployedInstance(web3, "RECPM");
@@ -425,6 +444,7 @@ let recpmService = {
   getVotesPerProject,
   createBounty,
   getActiveBounties,
+  getExpiredBounties,
   addToBounty,
   createBountyClaim,
   getBountyClaims,

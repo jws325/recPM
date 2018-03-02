@@ -208,6 +208,24 @@ initWeb3().then(() => {
     $resultsField.val(resultsText);
   });
 
+  $("#expired-bounties-button").click(async function () {
+    let resultsText;
+    let $resultsField = $(this).siblings(".results");
+
+    $resultsField.val("Running Transaction ...");
+
+    let projectAddress = $("#expired-bounties-project-address").val();
+    try {
+      let expiredBounties = await recpmService.getExpiredBounties(web3, projectAddress);
+      resultsText = "Expired Bounties:\r\n" + JSON.stringify(expiredBounties);
+    }
+    catch (err) {
+      resultsText = err.message;
+    }
+
+    $resultsField.val(resultsText);
+  });
+
   $("#add-to-bounty-button").click(async function () {
     let resultsText;
     let $resultsField = $(this).siblings(".results");
