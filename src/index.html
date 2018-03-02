@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>RECPM</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <style>
+        input {
+            width: 350px;
+        }
+
+        textarea {
+            width: 350px;
+            height: 50px;
+        }
+
+        h4 {
+            margin-bottom: 0px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <h1>RECPM</h1>
+
+    <div>Balance : <span id="balance"></span> (Total Supply : <span id="total-supply"></span>)</div>
+    <div>Staked balance : <span id="staked-balance"></span> (Total Staked : <span id="total-staked"></span>)</div>
+    <div>Bounties Locked Balance : <span id="bounty-locked-balance"></span></div>
+    <div>Votes to use : <span id="votes-to-use"></span></div>
+    <div>Total Upvotes this week : <span id="total-upvotes-received-this-week"></span></div>
+    <button type="button" id="refresh-balances-button">Refresh</button>
+
+    <form id="add-project-address">
+        <h4>Add Project Address</h4>
+        Address:<br>
+        <input type="text" id="add-project-address-address"><br>
+        <button type="button" id="add-project-address-button">Add</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+
+    <hr>
+
+    <form id="get-project-addresses">
+        <h4>Get Project Addresses</h4>
+        <button type="button" id="get-project-addresses-button">Get</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+
+    <hr>
+
+    <form id="stake-tokens">
+        <h4>Stake Tokens</h4>
+        Amount:<br>
+        <input type="text" id="stake-tokens-amount"><br>
+        <button type="button" id="stake-tokens-button">Stake</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="unstake-tokens">
+        <h4>Unstake Tokens</h4>
+        Amount:<br>
+        <input type="text" id="unstake-tokens-amount"><br>
+        <button type="button" id="unstake-tokens-button">Unstake</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="staked-balance-of">
+        <h4>Get Staked Balance of address</h4>
+        Address:<br>
+        <input type="text" id="staked-balance-of-address"><br>
+        <button type="button" id="staked-balance-of-button">Get</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="vote">
+        <h4>Vote</h4>
+        Project Address:<br>
+        <input type="text" id="vote-project-address"><br>
+        Votes:<br>
+        <input type="text" id="vote-votes"><br>
+        <button type="button" id="vote-button">Vote</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="votes-per-project">
+        <h4>Get Votes per project</h4>
+        <button type="button" id="votes-per-project-button">Get</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="create-bounty">
+        <h4>Create Bounty</h4>
+        Project Address:<br>
+        <input type="text" id="create-bounty-project-address"><br>
+        Amount:<br>
+        <input type="text" id="create-bounty-amount"><br>
+        Deadline Block:<br>
+        <input type="text" id="create-bounty-deadline-block"><br>
+        <button type="button" id="create-bounty-button">Create</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="active-bounties">
+        <h4>Get Active Bounties</h4>
+        Project Address:<br>
+        <input type="text" id="active-bounties-project-address"><br>
+        <button type="button" id="active-bounties-button">Get</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="expired-bounties">
+        <h4>Get Expired Bounties</h4>
+        Project Address:<br>
+        <input type="text" id="expired-bounties-project-address"><br>
+        <button type="button" id="expired-bounties-button">Get</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="add-to-bounty">
+        <h4>Add to Bounty</h4>
+        Project Address:<br>
+        <input type="text" id="add-to-bounty-project-address"><br>
+        Bounty Id:<br>
+        <input type="text" id="add-to-bounty-bounty-id"><br>
+        Amount:<br>
+        <input type="text" id="add-to-bounty-amount"><br>
+
+        <button type="button" id="add-to-bounty-button">Add</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="create-bounty-claim">
+        <h4>Create Bounty Claim</h4>
+        Project Address:<br>
+        <input type="text" id="create-bounty-claim-project-address"><br>
+        Bounty Id:<br>
+        <input type="text" id="create-bounty-claim-bounty-id"><br>
+
+        <button type="button" id="create-bounty-claim-button">Add</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="bounty-claims">
+        <h4>Get Bounty Claims</h4>
+        Project Address:<br>
+        <input type="text" id="bounty-claims-project-address"><br>
+        <button type="button" id="bounty-claims-button">Get</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="accept-bounty-claim">
+        <h4>Accept Bounty Claim</h4>
+        Project Address:<br>
+        <input type="text" id="accept-bounty-claim-project-address"><br>
+        Bounty Claim Id:<br>
+        <input type="text" id="accept-bounty-claim-bounty-claim-id"><br>
+
+        <button type="button" id="accept-bounty-claim-button">Accept</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+    <hr/>
+    <form id="refund-my-bounty-share">
+        <h4>Refund my bounty share</h4>
+        Project Address:<br>
+        <input type="text" id="refund-my-bounty-share-project-address"><br>
+        Bounty Id:<br>
+        <input type="text" id="refund-my-bounty-share-bounty-id"><br>
+
+        <button type="button" id="refund-my-bounty-share-button">Refund</button>
+        <br>
+        Results:<br>
+        <textarea class="results" disabled="disabled"></textarea>
+    </form>
+</div>
+</body>
+</html>

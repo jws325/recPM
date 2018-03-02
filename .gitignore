@@ -1,0 +1,9 @@
+.idea
+truffle.js
+build/
+node_modules/
+dist/
+
+firebase-debug.log
+firebase.json
+.firebaserc
